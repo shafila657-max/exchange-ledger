@@ -209,7 +209,7 @@ dialog::backdrop{background:rgba(17,17,20,.4);backdrop-filter:blur(2px)}
     <div class="brandrow"><div class="logo">X</div><div><div class="brand">Exchange Ledger</div><div class="brand-sub">SAR → AED → INR</div></div></div>
     <form class="search" data-form="globalSearch"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input name="q" id="gsearch" placeholder="Search deals…" autocomplete="off"><kbd>/</kbd></form>
     <nav class="nav" id="nav"></nav>
-    <div class="sidefoot"><b style="color:var(--text)">Prototype</b> · sample data saved only in this browser. Records only, no money moves.<div style="margin-top:8px"><button class="btn sm" data-act="resetDemo">Reset sample data</button></div></div>
+    <div class="sidefoot"><b style="color:var(--text)">Prototype</b> · play freely: refreshing the page brings the sample data back. Records only, no money moves.<div class="row" style="margin-top:8px;gap:6px"><button class="btn sm dan" data-act="clearAll">Clear all transactions</button><button class="btn sm" data-act="resetDemo">Reset sample data</button></div></div>
   </aside>
   <main class="main">
     <div class="topbar"><div class="t" id="ptitle"></div><div class="row" id="pactions"></div></div>
@@ -269,7 +269,7 @@ function emptyState() {
     capital: [], settings: defaultSettings(), counters: {deal: 0, batch: 0, capital: 0}};
 }
 function load() { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+function save() {} // prototype: nothing persists, refresh restores sample data
 const party = id => S.parties.find(p => p.id === id);
 const pname = id => party(id)?.name ?? '—';
 const region = id => S.regions.find(r => r.id === id);
@@ -1268,6 +1268,9 @@ const ACT = {
       <div class="full small muted">${k === 'add' ? 'Your own money entering the business. Raises capital invested.' : k === 'withdraw' ? 'Money you take out of the business. Lowers capital invested.' : 'Moves your money to a party (e.g. an advance to a distributor). Capital is unchanged; it now shows as a debtor.'}</div>
     </div></form>`, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="capForm">Save</button>`);
   },
+  clearAll() { ask('Clear all transactions', 'Set every deal, batch, payment and capital entry to zero? Parties, regions and rates stay. Refresh the page any time to get the sample data back.', {danger: true, ok: 'Clear to zero'}, () => {
+    const keep = {regions: S.regions, parties: S.parties, settings: S.settings};
+    S = {...emptyState(), ...keep}; save(); closeModal(); location.hash = '#/dashboard'; render(); toast('All transactions cleared'); }); },
   resetDemo() { ask('Reset sample data', 'Replace everything entered in this browser with the original sample data?', {danger: true, ok: 'Reset'}, () => { seed(); save(); closeModal(); location.hash = '#/dashboard'; render(); toast('Sample data restored'); }); },
   newDeal() { openModal('New deal', dealForm(), `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="dealForm">Save deal</button>`); },
   reverseDeal(el) {
@@ -1402,7 +1405,8 @@ function render() {
   if (focusId) { const n = document.getElementById(focusId); if (n) { n.focus(); try { n.setSelectionRange(sel, sel); } catch (e) {} } }
 }
 window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
-S = load() || seed();
+try { localStorage.removeItem(KEY); } catch (e) {}
+seed(); // always start from sample data; refresh resets
 S.capital ??= []; S.counters.capital ??= 0; S.settings = {...defaultSettings(), ...S.settings};
 if (!S.parties.some(p => p.type === 'operator')) S.parties.push({id: uid(), type: 'operator', name: 'Operator – Own Cash', phone: '', active: true});
 save();
