@@ -1,0 +1,1412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exchange Ledger Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;550;600;650;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ffffff;--side:#f6f6f7;--surface:#fff;--surface-2:#f6f6f8;--border:#ebebef;--text:#18181b;--muted:#71717a;
+  --accent:#6b3fe0;--accent-ink:#fff;--accent-soft:#efeafd;--accent-2:#d9cffa;
+  --pos:#15955a;--pos-soft:#e7f7ee;--danger:#dc2626;--danger-soft:#fdecec;--warn:#a15c07;--warn-soft:#fdf3e1;--info:#6b3fe0;--info-soft:#efeafd;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111114;--side:#18181c;--surface:#18181c;--surface-2:#202026;--border:#2a2a31;--text:#ececf1;--muted:#9a9aa6;
+  --accent:#9b7bff;--accent-ink:#120a2b;--accent-soft:#251d41;--accent-2:#3d3466;
+  --pos:#3fcf8e;--pos-soft:#11291e;--danger:#f87171;--danger-soft:#2c1515;--warn:#f0b35a;--warn-soft:#2a2112;--info:#9b7bff;--info-soft:#251d41;
+  --shadow:none;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111114;--side:#18181c;--surface:#18181c;--surface-2:#202026;--border:#2a2a31;--text:#ececf1;--muted:#9a9aa6;
+  --accent:#9b7bff;--accent-ink:#120a2b;--accent-soft:#251d41;--accent-2:#3d3466;
+  --pos:#3fcf8e;--pos-soft:#11291e;--danger:#f87171;--danger-soft:#2c1515;--warn:#f0b35a;--warn-soft:#2a2112;--info:#9b7bff;--info-soft:#251d41;
+  --shadow:none;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01"}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.app{display:flex;min-height:100vh}
+/* sidebar */
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--border);padding:20px 16px;position:sticky;top:0;height:100vh;overflow-y:auto}
+.brandrow{display:flex;align-items:center;gap:12px;padding:0 4px 20px}
+.logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(145deg,#8b5cf6,#5b2fd6);color:#fff;display:grid;place-items:center;font-weight:700;font-size:18px;box-shadow:0 4px 10px rgba(107,63,224,.3)}
+.brand{font-weight:650;font-size:15px;line-height:1.2}
+.brand-sub{font-size:12px;color:var(--muted)}
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0 10px;margin-bottom:22px;color:var(--muted)}
+.search input{border:none;background:none;padding:9px 0;outline:none}
+.search kbd{font:11px/1 inherit;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:3px 5px;color:var(--muted)}
+.navsec{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;padding:0 10px;margin:18px 0 6px}
+.nav a{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;color:var(--text);font-weight:500;margin-bottom:2px}
+.nav a svg{color:var(--muted)}
+.nav a:hover{background:rgba(0,0,0,.035);text-decoration:none}
+.nav a.on{background:var(--surface);box-shadow:var(--shadow)}
+.nav a.on svg{color:var(--text)}
+.nav a.on::before{content:"";position:absolute;left:-16px;top:8px;bottom:8px;width:4px;border-radius:0 4px 4px 0;background:var(--text)}
+.nav .cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--danger);color:#fff;font-size:11px;font-weight:600;display:grid;place-items:center}
+.sidefoot{margin-top:24px;padding:12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);font-size:12px;color:var(--muted)}
+/* main */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.topbar .t{font-size:16px;font-weight:550}
+.content{padding:24px 32px 64px;max-width:1400px;width:100%}
+.alert{display:flex;align-items:center;gap:12px;background:var(--accent-soft);border-radius:12px;padding:14px 18px;margin-bottom:20px;color:var(--text);flex-wrap:wrap}
+.alert svg{color:var(--accent)}
+.alert b{font-weight:600}
+.alert .sep{color:var(--muted)}
+.alert span.muted{flex:1 1 280px}
+.alert.info{background:var(--accent-soft)}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+h1{font-size:22px;margin:0;letter-spacing:-.015em;font-weight:650}
+h2{font-size:16px;margin:0 0 14px;font-weight:600;letter-spacing:-.01em}
+.crumb{font-size:12px;color:var(--muted);margin-bottom:4px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 22px;box-shadow:var(--shadow);margin-bottom:20px}
+.cardh{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.cardh h2{margin:0}
+.grid{display:grid;gap:20px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+/* KPI strip */
+.strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden}
+.strip .cell{padding:20px 22px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);margin:0 -1px -1px 0;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l l" "v sp" "s s";column-gap:12px;align-items:end}
+.strip .l{grid-area:l;font-size:13px;color:var(--muted);font-weight:500}
+.strip .v{grid-area:v;font-size:23px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip .s{grid-area:s;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:8px;font-weight:500}
+.strip .s svg{width:14px;height:14px}
+.strip .s.up{color:var(--pos)}.strip .s.down{color:var(--danger)}
+.strip .spark{grid-area:sp;width:84px;height:40px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface-2);border-radius:12px;padding:14px 16px}
+.kpi .l{font-size:12px;color:var(--muted)}
+.kpi .v{font-size:18px;font-weight:650;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:11px;color:var(--muted);margin-top:2px}
+.pos{color:var(--pos)}.neg{color:var(--danger)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:13px}
+/* chart */
+.bigvals{display:flex;gap:28px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px}
+.bigvals .bv{padding-right:28px;border-right:1px solid var(--border)}
+.bigvals .bv:last-of-type{border-right:none}
+.bigvals .bv .v{font-size:28px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.bigvals .bv .k{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.chart .gl{stroke:var(--border);stroke-dasharray:3 4}
+.chart .ax{fill:var(--muted);font-size:11px}
+.chart .b1{fill:var(--accent)}.chart .b2{fill:var(--accent-2)}
+.chart .hit{fill:transparent;cursor:default}
+.chart .hit:hover{fill:var(--surface-2)}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(16,24,40,.12);padding:10px 12px;font-size:12px;min-width:150px;opacity:0;transition:opacity .1s;z-index:3}
+.tip.show{opacity:1}
+.tip .tt{font-weight:600;margin-bottom:6px;font-size:13px}
+.tip .tr{display:flex;align-items:center;gap:8px;margin-top:3px}
+.tip .tr span:last-child{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:550}
+/* tables */
+.tw{overflow-x:auto;margin:0 -22px;padding:0 22px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap;background:var(--surface-2)}
+th:first-child{border-radius:8px 0 0 8px}th:last-child{border-radius:0 8px 8px 0}
+thead th{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+tfoot td{font-weight:650;border-bottom:none}
+tr.dim td{opacity:.5}
+.tw table.wide{min-width:1040px}
+td:first-child{white-space:nowrap}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:550;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.b-green{background:var(--pos-soft);color:var(--pos)}
+.b-blue{background:var(--accent-soft);color:var(--accent)}
+.b-amber{background:var(--warn-soft);color:var(--warn)}
+.b-red{background:var(--danger-soft);color:var(--danger)}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:8px 14px;border-radius:10px;font:inherit;font-weight:550;cursor:pointer;white-space:nowrap;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.btn:hover{background:var(--surface-2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn.dan{color:var(--danger)}
+.btn.sm{padding:5px 10px;font-size:12px;border-radius:8px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.link{font-weight:550;color:var(--accent)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.filters>*{flex:1 1 140px;min-width:0}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);font-weight:550}
+input,select,textarea{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 11px;width:100%;min-width:0}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.search input:focus{outline:none}
+textarea{resize:vertical;min-height:64px}
+.fg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.fg .full{grid-column:1/-1}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:8px 18px}
+.kv dt{color:var(--muted);font-size:13px}
+.kv dd{margin:0;font-variant-numeric:tabular-nums}
+.chain{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.chain .c{background:var(--surface-2);border-radius:12px;padding:14px 16px;position:relative}
+.chain .c .l{font-size:12px;color:var(--muted);font-weight:500}
+.chain .c .v{font-size:19px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:4px;letter-spacing:-.01em}
+.chain .c .r{font-size:12px;color:var(--muted);margin-top:4px}
+.steps{display:flex;gap:6px;margin:4px 0 18px;flex-wrap:wrap}
+.step{flex:1 1 130px;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:12px;color:var(--muted);border-top:3px solid var(--border);font-weight:500}
+.step.done{border-top-color:var(--accent);color:var(--text)}
+.step.cur{border-top-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:650}
+.preview{background:var(--surface-2);border-radius:12px;padding:12px 14px;font-size:13px}
+.preview .kv{grid-template-columns:1fr auto}
+.kv.money dd{text-align:right;font-weight:550}
+.lock{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
+.tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:12px;margin-bottom:16px;overflow-x:auto;width:max-content;max-width:100%}
+.tabs a{padding:7px 12px;color:var(--muted);font-weight:550;border-radius:9px;white-space:nowrap}
+.tabs a.on{color:var(--text);background:var(--surface);box-shadow:var(--shadow)}
+.tabs a:hover{text-decoration:none;color:var(--text)}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.hist{padding:8px 0;border-bottom:1px solid var(--border)}
+.hist:last-child{border-bottom:none}
+dialog{border:1px solid var(--border);border-radius:18px;padding:0;background:var(--surface);color:var(--text);width:min(660px,calc(100vw - 32px));max-height:calc(100vh - 48px);box-shadow:0 24px 60px rgba(16,24,40,.25)}
+dialog::backdrop{background:rgba(17,17,20,.4);backdrop-filter:blur(2px)}
+.mh{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid var(--border)}
+.mh h2{margin:0}
+.mb{padding:18px 22px;overflow:auto}
+.mf{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border)}
+.x{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
+.checklist{max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:12px}
+.checklist label{display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer}
+.checklist label:last-child{border-bottom:none}
+.checklist input{width:auto;accent-color:var(--accent)}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:550;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50;max-width:calc(100vw - 32px)}
+#toast.show{opacity:1}
+#toast.err{background:var(--danger);color:#fff}
+@media (max-width:1240px){.strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:960px){
+  .app{flex-direction:column}
+  .side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border);padding:12px 16px}
+  .brandrow{padding-bottom:10px}
+  .search,.navsec,.sidefoot{display:none}
+  .nav{display:flex;gap:4px;overflow-x:auto}
+  .nav a{white-space:nowrap;margin:0}
+  .nav a.on::before{display:none}
+  .topbar{padding:12px 16px}
+  .topbar .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #pactions [data-act=newBatch]{display:none}
+  .content{padding:16px 16px 64px}
+  .g2,.g3{grid-template-columns:1fr}
+  .chain{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tw{margin:0 -16px;padding:0 16px}
+  .card{padding:16px}
+}
+@media (max-width:520px){.strip{grid-template-columns:1fr}.fg{grid-template-columns:1fr}.chain{grid-template-columns:1fr}.bigvals .bv{border-right:none;padding-right:0}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brandrow"><div class="logo">X</div><div><div class="brand">Exchange Ledger</div><div class="brand-sub">SAR → AED → INR</div></div></div>
+    <form class="search" data-form="globalSearch"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input name="q" id="gsearch" placeholder="Search deals…" autocomplete="off"><kbd>/</kbd></form>
+    <nav class="nav" id="nav"></nav>
+    <div class="sidefoot"><b style="color:var(--text)">Prototype</b> · sample data saved only in this browser. Records only, no money moves.<div style="margin-top:8px"><button class="btn sm" data-act="resetDemo">Reset sample data</button></div></div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><div class="t" id="ptitle"></div><div class="row" id="pactions"></div></div>
+    <div class="content" id="view"></div>
+  </main>
+</div>
+<dialog id="modal"></dialog>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ============================ helpers ============================ */
+const R2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const R6 = n => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Math.random().toString(36).slice(2, 10);
+const nowISO = () => new Date().toISOString();
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const nfIN = new Intl.NumberFormat('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const nfUS = new Intl.NumberFormat('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const money = (n, c) => (n == null || isNaN(n)) ? '—' : (c === 'INR' ? '₹' + nfIN.format(n) : c + ' ' + nfUS.format(n));
+const signed = (n, c) => `<span class="${n > 0.004 ? 'pos' : n < -0.004 ? 'neg' : ''}">${money(n, c)}</span>`;
+const rate = n => { if (n == null || isNaN(n)) return '—'; const r = R6(n), d = (String(r).split('.')[1] || '').length; return d < 2 ? r.toFixed(2) : String(r); };
+const fdate = s => s ? new Date(s.length === 10 ? s + 'T00:00:00' : s).toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'}) : '—';
+const fdt = s => s ? new Date(s).toLocaleString('en-GB', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'}) : '—';
+const num = v => { const n = parseFloat(v); return isNaN(n) ? NaN : n; };
+
+/* ============================ labels ============================ */
+const PT = {saudi_agent: 'Saudi Agents', saudi_collector: 'Saudi Collectors', dubai_collector: 'Dubai Collectors', dubai_agent: 'Dubai Agents', distributor: 'Indian Distributors', operator: 'Operator Cash'};
+const PT1 = {saudi_agent: 'Saudi Agent', saudi_collector: 'Saudi Collector', dubai_collector: 'Dubai Collector', dubai_agent: 'Dubai Agent', distributor: 'Indian Distributor', operator: 'Operator Cash Account'};
+const DS = {pending_allocation: ['Pending Allocation', ''], assigned: ['Assigned to Distributor', 'b-blue'], out_for_delivery: ['Out for Delivery', 'b-amber'], completed: ['Completed', 'b-green'], cancelled: ['Cancelled', 'b-red']};
+const DS_FLOW = ['pending_allocation', 'assigned', 'out_for_delivery', 'completed'];
+const BS = {collected_saudi: ['Collected in Saudi', ''], in_transit: ['In Transit to Dubai', 'b-amber'], converted_aed: ['Converted to AED', 'b-blue'], settled: ['Settled with Dubai Agent', 'b-green']};
+const BS_FLOW = ['collected_saudi', 'in_transit', 'converted_aed', 'settled'];
+const dBadge = d => `<span class="badge ${DS[d.status][1]}">${DS[d.status][0]}</span>`;
+const bBadge = b => b.reversed ? '<span class="badge b-red">Reversed</span>' : (b.status === 'in_transit' && b.sarConverted > 0) ? `<span class="badge b-blue">Converting · ${Math.floor(b.sarConverted / b.sarTotal * 100)}%</span>` : `<span class="badge ${BS[b.status][1]}">${BS[b.status][0]}</span>`;
+const LOCK = '<span class="lock" title="Locked for audit">🔒 locked</span>';
+
+/* ============================ state ============================ */
+const KEY = 'xledger-prototype-v3';
+let S;
+const DEFAULT_SLABS = [{minSar: 0, discount: 1.00}, {minSar: 5000, discount: 0.70}, {minSar: 20000, discount: 0.45}, {minSar: 50000, discount: 0.25}, {minSar: 100000, discount: 0.10}];
+function defaultSettings() {
+  return {marketSarInrRate: 24.80, referenceSarInrRate: 24.77, referenceAedInrRate: 25.30, defaultDistributorFeeInr: 50,
+    slabs: DEFAULT_SLABS.map(x => ({...x})), rateLog: []};
+}
+const slabFor = (sar, slabs = S.settings.slabs) => [...slabs].sort((a, b) => b.minSar - a.minSar).find(x => sar >= x.minSar);
+const suggestRate = (sar, market) => R6(market - (slabFor(sar)?.discount ?? 0));
+function slabLabel(sl) {
+  if (!sl) return 'No slab';
+  const sorted = [...S.settings.slabs].sort((a, b) => a.minSar - b.minSar), i = sorted.indexOf(sl), next = sorted[i + 1];
+  const f = n => n >= 100000 ? nfIN.format(n / 100000).replace(/\.00$/, '') + ' lakh' : new Intl.NumberFormat('en-IN').format(n);
+  return next ? `${f(sl.minSar)} – ${f(next.minSar)} SAR` : `${f(sl.minSar)}+ SAR`;
+}
+function emptyState() {
+  return {regions: [], parties: [], deals: [], batches: [], allocations: [],
+    capital: [], settings: defaultSettings(), counters: {deal: 0, batch: 0, capital: 0}};
+}
+function load() { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+const party = id => S.parties.find(p => p.id === id);
+const pname = id => party(id)?.name ?? '—';
+const region = id => S.regions.find(r => r.id === id);
+const rname = id => region(id)?.name ?? '—';
+const deal = id => S.deals.find(d => d.id === id);
+const batch = id => S.batches.find(b => b.id === id);
+const activeBatch = b => b && !b.reversed;
+class UserError extends Error {}
+const fail = m => { throw new UserError(m); };
+
+/* ============================ calc engine ============================ */
+function dealCalc(d) {
+  // until a distributor is assigned, assume the default delivery fee
+  const fee = d.distributorId ? (d.distributorFeeInr || 0) : S.settings.defaultDistributorFeeInr;
+  const feeExpected = !d.distributorId;
+  const settled = d.inrDubaiYield != null;
+  const yieldInr = settled ? d.inrDubaiYield : R2(d.sarAmount * d.estSarInrRate);
+  const gross = R2(yieldInr - d.inrPayout);
+  return {settled, yieldInr, gross, fee, feeExpected, net: R2(gross - fee),
+    effRate: settled ? d.effectiveSarInrRate : d.estSarInrRate};
+}
+function allocateBatchYield(deals, inrYield) {
+  const sarTotal = deals.reduce((s, d) => s + d.sarAmount, 0);
+  const r = sarTotal > 0 ? inrYield / sarTotal : 0;
+  let assigned = 0;
+  return deals.map((d, i) => {
+    const y = i === deals.length - 1 ? R2(inrYield - assigned) : R2(d.sarAmount * r);
+    assigned = R2(assigned + y);
+    return {id: d.id, effectiveRate: R6(r), inrDubaiYield: y};
+  });
+}
+
+const activeParts = l => (l || []).filter(x => !x.reversed);
+function recalcBatch(b) {
+  const cv = activeParts(b.conversions), st = activeParts(b.settlements), sum = (l, k) => R2(l.reduce((s, x) => s + x[k], 0));
+  b.sarConverted = sum(cv, 'sar'); b.aedAmount = cv.length ? sum(cv, 'aed') : undefined;
+  b.sarToAedRate = cv.length ? R6(b.aedAmount / b.sarConverted) : undefined;
+  b.aedSettled = sum(st, 'aed'); b.inrYield = st.length ? sum(st, 'inr') : undefined;
+  b.aedToInrRate = st.length ? R6(b.inrYield / b.aedSettled) : undefined;
+  const wm = st.filter(x => x.marketRate); b.dubaiMargin = wm.length ? R2(wm.reduce((s, x) => s + x.aed * (x.marketRate - x.rate), 0)) : undefined;
+}
+/* ============================ actions ============================ */
+const A = {
+  addRegion(name) {
+    name = name.trim(); if (!name) fail('Region name is required');
+    if (S.regions.some(r => r.name.toLowerCase() === name.toLowerCase())) fail('Region already exists');
+    const r = {id: uid(), name}; S.regions.push(r); return r;
+  },
+  saveParty(f) {
+    if (!f.name?.trim()) fail('Name is required');
+    if (f.type === 'distributor' && !f.regionId) fail('Distributors need a region');
+    if (f.id) { Object.assign(party(f.id), {name: f.name.trim(), phone: f.phone, regionId: f.regionId || undefined, notes: f.notes, active: f.active}); return party(f.id); }
+    const p = {id: uid(), type: f.type, name: f.name.trim(), phone: f.phone || '', regionId: f.regionId || undefined, notes: f.notes || '', active: true};
+    S.parties.push(p); return p;
+  },
+  addDeal(f, at = nowISO()) {
+    const sar = num(f.sarAmount), r = num(f.dealRate), mkt = num(f.marketRate), est = num(f.estSarInrRate);
+    if (!(sar > 0)) fail('SAR amount must be greater than 0');
+    if (!(mkt > 0)) fail('Enter the market rate for this deal');
+    if (!(r > 0)) fail('Deal rate must be greater than 0');
+    if (!(est > 0)) fail('Enter the expected Dubai rate');
+    if (r > mkt * 1.05 || r < mkt * 0.9) fail('Deal rate ' + r + ' is far from market ' + mkt + ' — check for a typo');
+    const sl = slabFor(sar), sug = R6(mkt - (sl?.discount ?? 0));
+    if (!f.saudiAgentId) fail('Choose a Saudi agent');
+    if (!f.recipientName?.trim()) fail('Recipient name is required');
+    if (!f.regionId) fail('Choose a delivery region');
+    const n = ++S.counters.deal;
+    const d = {id: uid(), dealNo: 'D-' + String(n).padStart(4, '0'), dealDate: f.dealDate || at.slice(0, 10),
+      saudiAgentId: f.saudiAgentId, sarAmount: R2(sar), dealRate: R6(r),
+      marketRate: R6(mkt), slab: sl ? {minSar: sl.minSar, discount: sl.discount, label: slabLabel(sl)} : undefined,
+      suggestedRate: sug, rateOverride: Math.abs(R6(r) - sug) > 1e-6,
+      inrPayout: R2(sar * r), estSarInrRate: R6(est),
+      recipientName: f.recipientName.trim(), recipientPhone: f.recipientPhone || '', recipientAddress: f.recipientAddress || '',
+      regionId: f.regionId, distributorFeeInr: 0, status: 'pending_allocation',
+      history: [{status: 'pending_allocation', at, note: `Deal logged @ ${rate(r)} (market ${rate(mkt)}${Math.abs(R6(r) - sug) > 1e-6 ? ', slab rate ' + rate(sug) + ' overridden' : ', slab ' + (sl ? slabLabel(sl) : '—')})`}], replacesDealId: f.replacesDealId || undefined, createdAt: at};
+    S.deals.push(d); return d;
+  },
+  cancelDeal(id, reason, at = nowISO()) {
+    const d = deal(id);
+    if (d.status === 'cancelled') fail('Already cancelled');
+    if (d.status === 'completed') fail('A completed payout cannot be cancelled');
+    if (d.batchId) fail('This deal is in batch ' + batch(d.batchId).batchNo + '. Reverse the batch first.');
+    d.status = 'cancelled'; d.cancelReason = reason || 'Cancelled';
+    d.history.push({status: 'cancelled', at, note: d.cancelReason});
+  },
+  assignDistributor(id, distributorId, fee, at = nowISO()) {
+    const d = deal(id);
+    if (!['pending_allocation', 'assigned'].includes(d.status)) fail('Can only assign while pending or assigned');
+    if (!distributorId) fail('Choose a distributor');
+    const f = num(fee); if (isNaN(f) || f < 0) fail('Fee must be 0 or more');
+    const re = d.status === 'assigned';
+    d.distributorId = distributorId; d.distributorFeeInr = R2(f); d.status = 'assigned';
+    d.history.push({status: 'assigned', at, note: (re ? 'Reassigned to ' : 'Assigned to ') + pname(distributorId) + ' · fee ' + money(f, 'INR')});
+  },
+  advanceDeal(id, at = nowISO()) {
+    const d = deal(id);
+    const next = {assigned: 'out_for_delivery', out_for_delivery: 'completed'}[d.status];
+    if (!next) fail('No next step from ' + DS[d.status][0]);
+    d.status = next; d.history.push({status: next, at, note: next === 'completed' ? 'Paid ' + money(d.inrPayout, 'INR') + ' to ' + d.recipientName : ''});
+  },
+  createBatch(f, at = nowISO()) {
+    if (!f.saudiCollectorId) fail('Choose a Saudi collector');
+    const ids = f.dealIds || [];
+    if (!ids.length) fail('Select at least one deal');
+    for (const id of ids) { const d = deal(id); if (d.batchId || d.status === 'cancelled') fail(d.dealNo + ' cannot be batched'); }
+    const n = ++S.counters.batch;
+    const b = {id: uid(), batchNo: 'B-' + String(n).padStart(4, '0'), createdOn: f.createdOn || at.slice(0, 10),
+      saudiCollectorId: f.saudiCollectorId, dealIds: ids.slice(),
+      sarTotal: R2(ids.reduce((s, id) => s + deal(id).sarAmount, 0)), status: 'collected_saudi',
+      history: [{status: 'collected_saudi', at, note: ids.length + ' deals pooled by ' + pname(f.saudiCollectorId)}], notes: f.notes || ''};
+    ids.forEach(id => { deal(id).batchId = b.id; });
+    S.batches.push(b); return b;
+  },
+  batchTransit(id, dubaiCollectorId, at = nowISO()) {
+    const b = batch(id); if (b.reversed || b.status !== 'collected_saudi') fail('Batch is not awaiting transit');
+    if (!dubaiCollectorId) fail('Choose a Dubai collector');
+    b.dubaiCollectorId = dubaiCollectorId; b.status = 'in_transit';
+    b.history.push({status: 'in_transit', at, note: 'Handed over to ' + pname(dubaiCollectorId)});
+  },
+  batchConvert(id, f, at = nowISO()) {
+    const b = batch(id); if (b.reversed || b.status !== 'in_transit') fail('Batch is not in transit');
+    const left = R2(b.sarTotal - (b.sarConverted || 0));
+    const sar = num(f.sar), r = num(f.rate);
+    if (!(sar > 0)) fail('Enter the SAR amount converted in this part');
+    if (sar > left + 0.004) fail('Only ' + money(left, 'SAR') + ' left to convert');
+    if (!(r > 0)) fail('Enter the SAR → AED rate for this part');
+    (b.conversions ??= []).push({id: uid(), at, sar: R2(sar), rate: R6(r), aed: R2(sar * r), note: f.note || ''});
+    recalcBatch(b);
+    b.history.push({status: 'in_transit', at, note: `Converted ${money(sar, 'SAR')} → ${money(R2(sar * r), 'AED')} @ ${rate(r)}`});
+    if (b.sarTotal - b.sarConverted < 0.005) { b.status = 'converted_aed'; b.history.push({status: 'converted_aed', at, note: `All SAR converted in ${activeParts(b.conversions).length} part(s) · avg ${rate(b.sarToAedRate)}`}); }
+  },
+  batchSettle(id, f, at = nowISO()) {
+    const b = batch(id); if (b.reversed || !['in_transit', 'converted_aed'].includes(b.status)) fail('Batch cannot be settled now');
+    const agentId = b.dubaiAgentId || f.dubaiAgentId; if (!agentId) fail('Choose the Dubai agent');
+    const left = R2((b.aedAmount || 0) - (b.aedSettled || 0));
+    const aed = num(f.aed), r = num(f.rate), m = f.marketRate ? num(f.marketRate) : undefined;
+    if (!(left > 0.004)) fail('No converted AED waiting to be settled');
+    if (!(aed > 0)) fail('Enter the AED amount settled in this part');
+    if (aed > left + 0.004) fail('Only ' + money(left, 'AED') + ' converted and unsettled');
+    if (!(r > 0)) fail('Enter the net AED → INR rate for this part');
+    b.dubaiAgentId = agentId;
+    (b.settlements ??= []).push({id: uid(), at, aed: R2(aed), rate: R6(r), marketRate: m ? R6(m) : undefined, inr: R2(aed * r), note: f.note || ''});
+    recalcBatch(b);
+    b.history.push({status: b.status, at, note: `Settled ${money(aed, 'AED')} → ${money(R2(aed * r), 'INR')} @ ${rate(r)}`});
+    if (b.status === 'converted_aed' && b.aedAmount - b.aedSettled < 0.005) {
+      b.status = 'settled';
+      allocateBatchYield(b.dealIds.map(deal), b.inrYield).forEach(x => { const d = deal(x.id); d.effectiveSarInrRate = x.effectiveRate; d.inrDubaiYield = x.inrDubaiYield; });
+      b.history.push({status: 'settled', at, note: `Fully settled in ${activeParts(b.settlements).length} part(s) · avg AED→INR ${rate(b.aedToInrRate)} · effective SAR→INR ${rate(b.inrYield / b.sarTotal)} · rates locked`});
+    }
+  },
+  reverseTranche(batchId, kind, trancheId, reason, at = nowISO()) {
+    const b = batch(batchId); if (b.status === 'settled') fail('Batch is settled and locked');
+    const list = kind === 'conv' ? b.conversions : b.settlements, t = list.find(x => x.id === trancheId);
+    if (!t || t.reversed) fail('Part not found or already reversed');
+    if (kind === 'conv' && (b.aedAmount - t.aed) < (b.aedSettled || 0) - 0.004) fail('That AED is already settled. Reverse the settlement part first.');
+    t.reversed = {at, reason: reason || 'Reversed'};
+    recalcBatch(b);
+    if (kind === 'conv' && b.status === 'converted_aed') b.status = 'in_transit';
+    b.history.push({status: b.status, at, note: `Reversed ${kind === 'conv' ? 'conversion' : 'settlement'} part (${kind === 'conv' ? money(t.sar, 'SAR') : money(t.aed, 'AED')} @ ${rate(t.rate)}): ${t.reversed.reason}`});
+  },
+  reverseBatch(id, reason, at = nowISO()) {
+    const b = batch(id);
+    if (b.reversed) fail('Already reversed');
+    if (b.status === 'settled') fail('Settled batches are locked. Settled-batch reversal is still an open question for the client.');
+    if (activeParts(b.conversions).length) fail('Reverse its conversion and settlement parts first');
+    b.reversed = {at, reason: reason || 'Reversed'};
+    b.dealIds.forEach(did => { const d = deal(did); d.batchId = undefined; d.history.push({status: d.status, at, note: 'Released from reversed batch ' + b.batchNo}); });
+  },
+  addAllocation(f, at = nowISO()) {
+    const b = batch(f.batchId); if (!activeBatch(b) || !(b.inrYield > 0)) fail('Nothing settled with the Dubai agent yet');
+    if (!f.distributorId) fail('Choose a distributor');
+    const amt = num(f.inrAmount); if (!(amt > 0)) fail('Amount must be greater than 0');
+    const used = S.allocations.filter(a => a.batchId === b.id).reduce((s, a) => s + a.inrAmount, 0);
+    if (used + amt > b.inrYield + 0.004) fail('Exceeds INR remaining with Dubai agent (' + money(b.inrYield - used, 'INR') + ')');
+    const a = {id: uid(), batchId: b.id, distributorId: f.distributorId, inrAmount: R2(amt), date: f.date ? f.date + at.slice(10) : at, note: f.note || ''};
+    S.allocations.push(a); return a;
+  },
+  saveSettings(f) {
+    const fee = num(f.defaultDistributorFeeInr);
+    if (isNaN(fee) || fee < 0) fail('Fee must be 0 or more');
+    S.settings.defaultDistributorFeeInr = R2(fee);
+  },
+  setRates(f, at = nowISO()) {
+    const m = num(f.marketSarInrRate), y = num(f.referenceSarInrRate), a = num(f.referenceAedInrRate);
+    if (!(m > 0) || !(y > 0) || !(a > 0)) fail('All three rates must be greater than 0');
+    const st = S.settings;
+    st.marketSarInrRate = R6(m); st.referenceSarInrRate = R6(y); st.referenceAedInrRate = R6(a);
+    st.rateLog.push({at, market: st.marketSarInrRate, yieldRate: st.referenceSarInrRate, aed: st.referenceAedInrRate, note: f.note || ''});
+  },
+  saveSlabs(rows) {
+    if (!rows.length) fail('Keep at least one slab');
+    for (const r of rows) { if (!(r.minSar >= 0)) fail('Minimum SAR must be 0 or more'); if (isNaN(r.discount) || r.discount < -1 || r.discount > 5) fail('Discount must be between -1 and 5'); }
+    if (!rows.some(r => r.minSar === 0)) fail('One slab must start at 0 SAR');
+    if (new Set(rows.map(r => r.minSar)).size !== rows.length) fail('Two slabs have the same minimum');
+    S.settings.slabs = rows.map(r => ({minSar: R2(r.minSar), discount: R6(r.discount)})).sort((a, b) => a.minSar - b.minSar);
+  },
+  capitalEntry(f, at = nowISO()) {
+    const amt = num(f.amount); if (!(amt > 0)) fail('Amount must be greater than 0');
+    if (!['SAR', 'AED', 'INR'].includes(f.currency)) fail('Choose a currency');
+    if (!f.partyId) fail(f.kind === 'add' ? 'Choose where the money is held' : 'Choose where the money comes from');
+    if (f.kind === 'transfer') { if (!f.toPartyId) fail('Choose who receives the money'); if (f.toPartyId === f.partyId) fail('From and to must differ'); }
+    if (f.kind !== 'add') {
+      const have = balances(deriveLedger())[f.partyId]?.[f.currency] || 0;
+      if (amt > have + 0.004) fail(pname(f.partyId) + ' only holds ' + money(have, f.currency));
+    }
+    const n = ++S.counters.capital;
+    const c = {id: uid(), no: 'C-' + String(n).padStart(4, '0'), kind: f.kind, amount: R2(amt), currency: f.currency, partyId: f.partyId,
+      toPartyId: f.kind === 'transfer' ? f.toPartyId : undefined, date: f.date ? f.date + at.slice(10) : at, note: f.note || ''};
+    S.capital.push(c); return c;
+  },
+};
+
+/* ============================ ledger (derived) ============================ */
+function deriveLedger() {
+  const E = [];
+  const add = (date, partyId, cur, amt, memo, ref, rev) => { if (partyId && Math.abs(amt) > 0.0001) E.push({date, partyId, cur, amt: R2(amt), memo, ref, rev: !!rev}); };
+  for (const d of S.deals) {
+    const ref = {kind: 'deal', id: d.id, no: d.dealNo};
+    add(d.createdAt, d.saudiAgentId, 'SAR', d.sarAmount, 'Collected from customer for ' + d.recipientName, ref);
+    if (d.status === 'cancelled') add(d.history.at(-1).at, d.saudiAgentId, 'SAR', -d.sarAmount, 'Reversal: ' + d.cancelReason, ref, true);
+    if (d.status === 'completed') {
+      const at = d.history.find(h => h.status === 'completed').at;
+      add(at, d.distributorId, 'INR', -d.inrPayout, 'Paid to recipient ' + d.recipientName, ref);
+      add(at, d.distributorId, 'INR', -d.distributorFeeInr, 'Delivery fee retained', ref);
+    }
+  }
+  for (const b of S.batches) {
+    const ref = {kind: 'batch', id: b.id, no: b.batchNo};
+    const at = s => b.history.find(h => h.status === s)?.at;
+    const L = [];
+    const push = (...a) => L.push(a);
+    if (at('collected_saudi')) {
+      b.dealIds.forEach(id => { const d = deal(id); push(at('collected_saudi'), d.saudiAgentId, 'SAR', -d.sarAmount, 'Handed to collector (' + d.dealNo + ')'); });
+      push(at('collected_saudi'), b.saudiCollectorId, 'SAR', b.sarTotal, 'Pooled ' + b.dealIds.length + ' deals');
+    }
+    if (at('in_transit')) {
+      push(at('in_transit'), b.saudiCollectorId, 'SAR', -b.sarTotal, 'Handed to ' + pname(b.dubaiCollectorId));
+      push(at('in_transit'), b.dubaiCollectorId, 'SAR', b.sarTotal, 'Received from ' + pname(b.saudiCollectorId));
+    }
+    L.forEach(x => add(x[0], x[1], x[2], x[3], x[4], ref));
+    if (b.reversed) L.forEach(x => add(b.reversed.at, x[1], x[2], -x[3], 'Reversal: ' + b.reversed.reason, ref, true));
+    const part = (t, rows) => { rows.forEach(x => add(t.at, ...x, ref)); if (t.reversed) rows.forEach(x => add(t.reversed.at, x[0], x[1], -x[2], 'Reversal: ' + t.reversed.reason, ref, true)); };
+    (b.conversions || []).forEach(c => part(c, [
+      [b.dubaiCollectorId, 'SAR', -c.sar, `Converted part @ ${rate(c.rate)}`],
+      [b.dubaiCollectorId, 'AED', c.aed, `From ${money(c.sar, 'SAR')} @ ${rate(c.rate)}`]]));
+    (b.settlements || []).forEach(t => part(t, [
+      [b.dubaiCollectorId, 'AED', -t.aed, 'Handed to ' + pname(b.dubaiAgentId)],
+      [b.dubaiAgentId, 'AED', t.aed, 'Received from ' + pname(b.dubaiCollectorId)],
+      [b.dubaiAgentId, 'AED', -t.aed, `Converted to INR @ ${rate(t.rate)}`],
+      [b.dubaiAgentId, 'INR', t.inr, 'INR payable to India']]));
+  }
+  for (const a of S.allocations) {
+    const b = batch(a.batchId); const ref = {kind: 'batch', id: b.id, no: b.batchNo};
+    add(a.date, b.dubaiAgentId, 'INR', -a.inrAmount, 'Paid to ' + pname(a.distributorId), ref);
+    add(a.date, a.distributorId, 'INR', a.inrAmount, 'Received from ' + pname(b.dubaiAgentId), ref);
+  }
+  for (const c of S.capital) {
+    const ref = {kind: 'capital', id: c.id, no: c.no};
+    if (c.kind === 'add') add(c.date, c.partyId, c.currency, c.amount, 'Capital added by operator' + (c.note ? ' · ' + c.note : ''), ref);
+    if (c.kind === 'withdraw') add(c.date, c.partyId, c.currency, -c.amount, 'Capital withdrawn by operator' + (c.note ? ' · ' + c.note : ''), ref);
+    if (c.kind === 'transfer') { add(c.date, c.partyId, c.currency, -c.amount, 'Moved to ' + pname(c.toPartyId) + (c.note ? ' · ' + c.note : ''), ref); add(c.date, c.toPartyId, c.currency, c.amount, 'Operator funds from ' + pname(c.partyId) + (c.note ? ' · ' + c.note : ''), ref); }
+  }
+  return E.sort((x, y) => x.date.localeCompare(y.date));
+}
+function balances(E) {
+  const m = {};
+  for (const e of E) { m[e.partyId] ??= {SAR: 0, AED: 0, INR: 0}; m[e.partyId][e.cur] = R2(m[e.partyId][e.cur] + e.amt); }
+  return m;
+}
+const BAL_LABEL = {saudi_agent: ['SAR', 'SAR due from agent'], saudi_collector: ['SAR', 'SAR in custody'], dubai_collector: ['SAR/AED', 'In custody'], dubai_agent: ['INR', 'INR due to India'], distributor: ['INR', 'Cash held'], operator: ['INR', 'Cash held']};
+
+/* ============================ seed ============================ */
+function seed() {
+  S = emptyState();
+  const t = (day, h) => `2026-11-${String(day).padStart(2, '0')}T${String(h).padStart(2, '0')}:00:00.000Z`;
+  const [ker, mum, che] = ['Kerala', 'Mumbai', 'Chennai'].map(n => A.addRegion(n));
+  const P = (type, name, phone, regionId) => A.saveParty({type, name, phone, regionId});
+  const ag = [P('saudi_agent', 'Abdul Rahman (Riyadh)', '+966 50 000 0101'), P('saudi_agent', 'Yusuf (Jeddah)', '+966 50 000 0102'),
+    P('saudi_agent', 'Naseer (Dammam)', '+966 50 000 0103'), P('saudi_agent', 'Haris (Riyadh)', '+966 50 000 0104'), P('saudi_agent', 'Salim (Makkah)', '+966 50 000 0105')];
+  const sc = P('saudi_collector', 'Faisal – Saudi Collector', '+966 55 000 0201');
+  const dc = P('dubai_collector', 'Ashraf – Dubai Collector', '+971 50 000 0301');
+  const op = P('operator', 'Operator – Own Cash', '');
+  A.capitalEntry({kind: 'add', amount: 2500000, currency: 'INR', partyId: op.id, date: '2026-11-01', note: 'Opening capital'}, t(1, 8));
+  const da = P('dubai_agent', 'Rashid – Dubai Settlement Agent', '+971 50 000 0401');
+  const dk = P('distributor', 'Kozhikode Distributor', '+91 90000 00501', ker.id);
+  const dm = P('distributor', 'Mumbai Distributor', '+91 90000 00502', mum.id);
+  const dch = P('distributor', 'Chennai Distributor', '+91 90000 00503', che.id);
+  A.capitalEntry({kind: 'transfer', amount: 500000, currency: 'INR', partyId: op.id, toPartyId: dk.id, date: '2026-11-01', note: 'Float advance for Kerala payouts'}, t(1, 9));
+  const distFor = {[ker.id]: dk, [mum.id]: dm, [che.id]: dch};
+  // market moves through the month; operator updates it a few times a day
+  const MKT = {2: 24.72, 3: 24.80, 4: 24.85, 10: 24.78, 11: 24.90, 12: 24.95, 15: 24.88, 16: 24.80, 17: 24.82, 18: 24.80};
+  Object.entries(MKT).forEach(([day, m]) => A.setRates({marketSarInrRate: m, referenceSarInrRate: R6(m - 0.03), referenceAedInrRate: R2((m - 0.03) / 0.979), note: +day === 18 ? 'Morning update' : ''}, t(+day, 5)));
+  // D(day, agent, sar, recipient, address, region, overrideRate?)
+  const D = (day, a, sar, name, addr, reg, override) => {
+    const m = MKT[day];
+    return A.addDeal({dealDate: t(day, 6).slice(0, 10), saudiAgentId: ag[a].id, sarAmount: sar, marketRate: m, estSarInrRate: R6(m - 0.03),
+      dealRate: override ?? suggestRate(sar, m), recipientName: name, recipientPhone: '+91 90000 1' + String(S.counters.deal + 1).padStart(4, '0'),
+      recipientAddress: addr, regionId: reg.id}, t(day, 6 + (S.counters.deal % 8)));
+  };
+  const b1 = [
+    D(2, 0, 1000, 'Anwar K', 'Nadakkavu, Kozhikode', ker),
+    D(2, 1, 2500, 'Fathima P', 'Malappuram town', ker),
+    D(3, 2, 25000, 'Rakesh S', 'Andheri East, Mumbai', mum),
+    D(3, 3, 800, 'Lakshmi R', 'T. Nagar, Chennai', che),
+    D(4, 0, 100000, 'Shameer V (bulk)', 'Tirur, Malappuram', ker),
+  ];
+  const B1 = A.createBatch({saudiCollectorId: sc.id, dealIds: b1.map(d => d.id), createdOn: '2026-11-05'}, t(5, 9));
+  A.batchTransit(B1.id, dc.id, t(6, 10));
+  A.batchConvert(B1.id, {sar: 80000, rate: 0.9790, note: 'Morning exchange'}, t(6, 15));
+  A.batchSettle(B1.id, {dubaiAgentId: da.id, aed: 50000, rate: 25.32, marketRate: 25.48}, t(7, 8));
+  A.batchConvert(B1.id, {sar: 49300, rate: 0.9784, note: 'Rate dipped'}, t(7, 11));
+  A.batchSettle(B1.id, {aed: R2(B1.aedAmount - B1.aedSettled), rate: 25.28, marketRate: 25.45}, t(8, 12));
+  b1.forEach(d => A.assignDistributor(d.id, distFor[d.regionId].id, d.sarAmount >= 50000 ? 500 : 50, t(8, 13)));
+  for (const dist of [dk, dm, dch]) {
+    const amt = b1.filter(d => d.distributorId === dist.id).reduce((s, d) => s + d.inrPayout + d.distributorFeeInr, 0);
+    A.addAllocation({batchId: B1.id, distributorId: dist.id, inrAmount: R2(amt)}, t(8, 14));
+  }
+  [0, 1, 2, 3].forEach(i => { A.advanceDeal(b1[i].id, t(9, 9)); A.advanceDeal(b1[i].id, t(9 + i % 2, 15)); });
+  A.advanceDeal(b1[4].id, t(10, 9));
+  const b2 = [
+    D(10, 1, 2000, 'Jaseela M', 'Kondotty, Malappuram', ker),
+    D(11, 4, 60000, 'Priya N (bulk)', 'Dadar West, Mumbai', mum, 24.70),
+    D(11, 2, 4000, 'Muneer T', 'Vadakara, Kozhikode', ker),
+    D(12, 3, 900, 'Karthik V', 'Velachery, Chennai', che),
+  ];
+  const B2 = A.createBatch({saudiCollectorId: sc.id, dealIds: b2.map(d => d.id), createdOn: '2026-11-13'}, t(13, 9));
+  A.batchTransit(B2.id, dc.id, t(14, 10));
+  A.batchConvert(B2.id, {sar: 40000, rate: 0.9792}, t(15, 11));
+  A.batchSettle(B2.id, {dubaiAgentId: da.id, aed: 20000, rate: 25.35, marketRate: 25.50, note: 'First part'}, t(16, 12));
+  A.assignDistributor(b2[0].id, dk.id, 50, t(14, 12));
+  D(15, 0, 1800, 'Sajid A', 'Perinthalmanna', ker);
+  const cx = D(16, 3, 600, 'Imran Q', 'Kurla, Mumbai', mum);
+  A.cancelDeal(cx.id, 'Customer withdrew', t(16, 15));
+  D(16, 1, 22000, 'Nisha J', 'Feroke, Kozhikode', ker);
+  D(17, 4, 1000, 'Arun P', 'Anna Nagar, Chennai', che);
+  return S;
+}
+
+/* ============================ UI infra ============================ */
+const UI = {deals: {q: '', status: '', agent: '', region: '', dist: '', from: '', to: ''}, partyTab: 'saudi_agent',
+  report: {from: '2026-11-01', to: todayStr(), group: 'agent'}};
+function toast(msg, err) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.className = '', 2600);
+}
+function run(fn, okMsg) {
+  try { fn(); save(); closeModal(); render(); if (okMsg) toast(okMsg); }
+  catch (e) { if (e instanceof UserError) toast(e.message, true); else { console.error(e); toast('Unexpected error: ' + e.message, true); } }
+}
+const modal = document.getElementById('modal');
+function openModal(title, body, footer) {
+  modal.innerHTML = `<div class="mh"><h2>${title}</h2><button class="x" data-act="closeModal" aria-label="Close">×</button></div><div class="mb">${body}</div>${footer ? `<div class="mf">${footer}</div>` : ''}`;
+  modal.showModal();
+  const f = modal.querySelector('form[data-live]'); if (f) LIVE[f.dataset.live]?.(f);
+}
+function closeModal() { if (modal.open) modal.close(); }
+// in-app replacement for confirm()/prompt(), which sandboxed hosts often block
+let ASK_CB = null;
+function ask(title, msg, opts, cb) {
+  ASK_CB = cb;
+  openModal(esc(title), `<form data-form="ask" id="askForm"><p style="margin:0 0 14px">${esc(msg)}</p>${opts.reason ? '<label class="f">Reason<input name="reason" placeholder="Required for the audit trail" required></label>' : ''}</form>`,
+    `<button class="btn" data-act="closeModal">Cancel</button><button class="btn ${opts.danger ? 'dan' : 'pri'}" form="askForm">${esc(opts.ok || 'Confirm')}</button>`);
+  setTimeout(() => modal.querySelector('input[name=reason]')?.focus(), 30);
+}
+const opts = (list, sel, empty) => (empty != null ? `<option value="">${esc(empty)}</option>` : '') + list.map(x => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+const partiesOf = (type, includeInactive) => S.parties.filter(p => p.type === type && (includeInactive || p.active));
+const steps = (flow, labels, cur) => { const i = flow.indexOf(cur); return `<div class="steps">${flow.map((s, j) => `<div class="step ${j < i ? 'done' : j === i ? 'cur' : ''}">${j + 1}. ${labels[s][0]}</div>`).join('')}</div>`; };
+const dealLink = d => `<a href="#/deal/${d.id}">${d.dealNo}</a>`;
+const batchLink = b => `<a href="#/batch/${b.id}">${b.batchNo}</a>`;
+const partyLink = id => party(id) ? `<a href="#/party/${id}">${esc(pname(id))}</a>` : '—';
+
+/* ============================ pages ============================ */
+const IC = {
+  dashboard: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+  deals: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  batches: '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+  parties: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>',
+  reports: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 17v-3M12 17v-6M15 17v-4"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  capital: '<rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10h19M16 14.5h2"/>',
+  balances: '<path d="M12 3v18M5 7h14M5 7l-3 7a3.5 3.5 0 0 0 6 0zM19 7l-3 7a3.5 3.5 0 0 0 6 0z"/>',
+  alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" fill="currentColor" stroke="none"/><path d="M12 9v4M12 17h.01" stroke="#fff"/>',
+  up: '<path d="M7 17 17 7M8 7h9v9"/>', down: '<path d="M7 7l10 10M17 8v9H8"/>', plus: '<path d="M12 5v14M5 12h14"/>',
+};
+const icon = (k, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24">${IC[k]}</svg>`;
+const NAV_SECTIONS = [['Main', [['dashboard', 'Dashboard'], ['deals', 'Deals'], ['batches', 'Transit Batches'], ['parties', 'Parties & Ledgers']]], ['Finance', [['capital', 'Capital'], ['balances', 'Debtors & Creditors']]], ['Insights', [['reports', 'Reports']]], ['System', [['settings', 'Settings']]]];
+const TITLES = {dashboard: 'Overview Dashboard', deals: 'Deals', deal: 'Deal', batches: 'Transit Batches', batch: 'Transit Batch', parties: 'Parties & Ledgers', party: 'Party Ledger', reports: 'Reports', settings: 'Settings', capital: 'Capital', balances: 'Debtors & Creditors'};
+function navCounts() {
+  return {deals: S.deals.filter(d => d.status === 'pending_allocation').length,
+    batches: S.batches.filter(b => activeBatch(b) && b.status !== 'settled').length};
+}
+
+const nfC = new Intl.NumberFormat('en-IN', {notation: 'compact', maximumFractionDigits: 2});
+const cmp = (n, c) => `<span title="${money(n, c)}">${c === 'INR' ? '₹' : c + ' '}${(c === 'INR' ? nfC : nfUC).format(n)}</span>`;
+const nfUC = new Intl.NumberFormat('en-US', {notation: 'compact', maximumFractionDigits: 2});
+const isoDay = d => d.toISOString().slice(0, 10);
+function lastDays(n) { const out = [], t = new Date(todayStr() + 'T00:00:00Z'); for (let i = n - 1; i >= 0; i--) { const d = new Date(t); d.setUTCDate(t.getUTCDate() - i); out.push(isoDay(d)); } return out; }
+function sparkline(vals) {
+  const w = 84, h = 40, max = Math.max(1, ...vals), step = w / Math.max(1, vals.length - 1);
+  const pts = vals.map((v, i) => [i * step, h - 4 - (v / max) * (h - 10)]);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+  const id = 'g' + uid();
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}"><defs><linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--pos)" stop-opacity=".22"/><stop offset="1" stop-color="var(--pos)" stop-opacity="0"/></linearGradient></defs><path d="${line}L${w} ${h}L0 ${h}Z" fill="url(#${id})"/><path d="${line}" fill="none" stroke="var(--pos)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function trend(vals) {
+  const h = Math.floor(vals.length / 2), a = vals.slice(0, h).reduce((s, v) => s + v, 0), b = vals.slice(h).reduce((s, v) => s + v, 0);
+  if (!a) return b ? {cls: 'up', txt: 'new this week'} : {cls: '', txt: 'no activity'};
+  const pct = (b - a) / a * 100;
+  return {cls: pct >= 0 ? 'up' : 'down', txt: `${icon(pct >= 0 ? 'up' : 'down')}${Math.abs(pct).toFixed(1)}% vs prior 7 days`};
+}
+let CHART = null;
+function barChart(labels, s1, s2, n1, n2) {
+  const W = 800, H = 260, L = 52, B = 26, T = 8, max0 = Math.max(1, ...s1, ...s2);
+  const mag = Math.pow(10, Math.floor(Math.log10(max0))), max = Math.ceil(max0 / mag / 2) * mag * 2 || 1;
+  const ticks = [0, .25, .5, .75, 1].map(f => f * max);
+  const cw = (W - L) / labels.length, bw = Math.min(26, cw * .32);
+  const y = v => T + (H - T - B) * (1 - v / max);
+  CHART = {labels, s1, s2, n1, n2};
+  let g = ticks.map(t => `<line class="gl" x1="${L}" x2="${W}" y1="${y(t)}" y2="${y(t)}"/><text class="ax" x="${L - 10}" y="${y(t) + 4}" text-anchor="end">${t ? '₹' + nfC.format(t) : '0'}</text>`).join('');
+  labels.forEach((lb, i) => {
+    const x = L + i * cw + cw / 2;
+    g += `<rect class="hit" data-ci="${i}" x="${L + i * cw + 2}" y="${T}" width="${cw - 4}" height="${H - T - B}" rx="6"/>`;
+    if (s1[i]) g += `<rect class="b1" x="${x - bw - 2}" y="${y(s1[i])}" width="${bw}" height="${H - B - y(s1[i])}" rx="5" pointer-events="none"/>`;
+    if (s2[i]) g += `<rect class="b2" x="${x + 2}" y="${y(s2[i])}" width="${bw}" height="${H - B - y(s2[i])}" rx="5" pointer-events="none"/>`;
+    if (labels.length <= 16 || i % 2 === 0) g += `<text class="ax" x="${x}" y="${H - 6}" text-anchor="middle">${new Date(lb + 'T00:00:00').getDate()}</text>`;
+  });
+  return `<div class="chart" id="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(n1)} vs ${esc(n2)} by day">${g}</svg><div class="tip" id="tip"></div></div>`;
+}
+
+function pageDashboard() {
+  const E = deriveLedger(), bal = balances(E);
+  const live = S.deals.filter(d => d.status !== 'cancelled');
+  const sar = live.reduce((s, d) => s + d.sarAmount, 0);
+  const settledB = S.batches.filter(b => activeBatch(b) && b.status === 'settled');
+  const inrY = settledB.reduce((s, b) => s + b.inrYield, 0);
+  const done = live.filter(d => d.status === 'completed');
+  const inrDist = done.reduce((s, d) => s + d.inrPayout, 0);
+  const realised = live.filter(d => d.inrDubaiYield != null).reduce((s, d) => s + dealCalc(d).net, 0);
+  const est = live.filter(d => d.inrDubaiYield == null).reduce((s, d) => s + dealCalc(d).net, 0);
+  const owed = live.filter(d => d.status !== 'completed').reduce((s, d) => s + d.inrPayout, 0);
+  const sumType = (type, cur) => partiesOf(type, true).reduce((s, p) => s + (bal[p.id]?.[cur] || 0), 0);
+  const POS = position();
+  // daily series
+  const days = lastDays(14);
+  const byDay = (fn) => days.map(day => fn(day));
+  const sarD = byDay(day => live.filter(d => d.dealDate === day).reduce((s, d) => s + d.sarAmount, 0));
+  const promD = byDay(day => live.filter(d => d.dealDate === day).reduce((s, d) => s + d.inrPayout, 0));
+  const compAt = d => d.history.find(h => h.status === 'completed')?.at.slice(0, 10);
+  const paidD = byDay(day => done.filter(d => compAt(d) === day).reduce((s, d) => s + d.inrPayout, 0));
+  const profD = byDay(day => live.filter(d => d.dealDate === day).reduce((s, d) => s + dealCalc(d).net, 0));
+  const t1 = trend(sarD), t2 = trend(paidD);
+  // alerts
+  const pend = live.filter(d => d.status === 'pending_allocation').length;
+  const unb = live.filter(d => !d.batchId).length;
+  const transit = S.batches.filter(b => activeBatch(b) && b.status !== 'settled').length;
+  const unalloc = sumType('dubai_agent', 'INR');
+  const alerts = [pend && `${pend} deals waiting for a distributor`, unb && `${unb} deals not yet batched`, transit && `${transit} batch${transit > 1 ? 'es' : ''} not settled`, unalloc > 0.01 && `${money(unalloc, 'INR')} still with Dubai agent`].filter(Boolean);
+  const promTot = promD.reduce((s, v) => s + v, 0), paidTot = paidD.reduce((s, v) => s + v, 0);
+  const counts = Object.fromEntries(Object.keys(DS).map(k => [k, S.deals.filter(d => d.status === k).length]));
+  const bcount = Object.fromEntries(BS_FLOW.map(k => [k, S.batches.filter(b => activeBatch(b) && b.status === k).length]));
+  const maxC = Math.max(1, ...Object.values(counts));
+  const balRows = HOLDER_ORDER.flatMap(type => partiesOf(type, true).map(p => {
+    const b = bal[p.id] || {SAR: 0, AED: 0, INR: 0};
+    if (!b.SAR && !b.AED && !b.INR) return '';
+    return `<tr><td>${partyLink(p.id)}<div class="small muted">${PT1[type]}</div></td><td class="num">${b.SAR ? money(b.SAR, 'SAR') : '—'}</td><td class="num">${b.AED ? money(b.AED, 'AED') : '—'}</td><td class="num">${b.INR ? money(b.INR, 'INR') : '—'}</td></tr>`;
+  })).join('');
+  const recent = [...S.deals].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6);
+  return `
+  ${alerts.length ? `<div class="alert">${icon('alert')}<b>${alerts.length} item${alerts.length > 1 ? 's' : ''} need your attention</b><span class="sep">·</span><span class="muted">${alerts.join(' · ')}</span></div>` : ''}
+  <div class="strip">
+    <div class="cell"><div class="l">Total SAR collected</div><div class="v">${cmp(sar, 'SAR')}</div>${sparkline(sarD)}<div class="s ${t1.cls}">${t1.txt}</div></div>
+    <div class="cell"><div class="l">INR from Dubai agent</div><div class="v">${cmp(inrY, 'INR')}</div>${sparkline(byDay(day => settledB.filter(b => b.history.at(-1).at.slice(0, 10) === day).reduce((s, b) => s + b.inrYield, 0)))}<div class="s">${settledB.length} settled batch${settledB.length === 1 ? '' : 'es'}</div></div>
+    <div class="cell"><div class="l">INR distributed</div><div class="v">${cmp(inrDist, 'INR')}</div>${sparkline(paidD)}<div class="s ${t2.cls}">${t2.txt}</div></div>
+    <div class="cell"><div class="l">Operator net profit</div><div class="v">${cmp(realised, 'INR')}</div>${sparkline(profD)}<div class="s">+ ${money(est, 'INR')} estimated (unsettled)</div></div>
+  </div>
+  <div class="card">
+    <div class="cardh"><h2>INR promised vs paid out · last 14 days</h2><a class="link" href="#/reports">View full report</a></div>
+    <div class="bigvals">
+      <div class="bv"><div class="v">₹${nfC.format(promTot)}</div><div class="k"><i class="sw" style="background:var(--accent)"></i>INR promised (new deals)</div></div>
+      <div class="bv"><div class="v">₹${nfC.format(paidTot)}</div><div class="k"><i class="sw" style="background:var(--accent-2)"></i>INR paid to recipients</div></div>
+      <span style="margin-left:auto" class="pill" title="INR promised to recipients and not yet paid">${money(owed, 'INR')} still owed</span>
+    </div>
+    ${barChart(days, promD, paidD, 'Promised', 'Paid out')}
+  </div>
+  <div class="grid g2">
+    <div class="card"><div class="cardh"><h2>Capital &amp; balances</h2><a class="link" href="#/capital">Open capital</a></div>
+      <dl class="kv money" style="grid-template-columns:1fr auto">
+        <dt>Capital invested</dt><dd>${money(POS.capital, 'INR')}</dd>
+        <dt>Profit (realised + unrealised)</dt><dd class="pos">${money(POS.realised + POS.unrealised, 'INR')}</dd>
+        <dt>Operator cash in hand</dt><dd>${money(POS.cash, 'INR')}</dd>
+        <dt><a href="#/balances">Debtors · owed to you</a></dt><dd>${money(POS.dTot, 'INR')}</dd>
+        <dt><a href="#/balances">Creditors · you owe</a></dt><dd class="neg">− ${money(POS.cTot, 'INR')}</dd>
+        <dt style="border-top:1px solid var(--border);padding-top:8px"><b style="color:var(--text)">Total capital employed</b></dt><dd style="border-top:1px solid var(--border);padding-top:8px"><b>${money(POS.net, 'INR')}</b></dd>
+      </dl></div>
+    <div class="card"><h2>Pipeline</h2>
+      ${Object.keys(DS).map(k => `<div style="display:grid;grid-template-columns:160px 1fr 28px;gap:10px;align-items:center;margin-bottom:8px"><span class="small">${DS[k][0]}</span><div class="bar"><i style="width:${counts[k] / maxC * 100}%"></i></div><span class="small num">${counts[k]}</span></div>`).join('')}
+      <div class="row" style="margin-top:14px">${BS_FLOW.map(k => `<span class="badge ${BS[k][1]}">${BS[k][0]}: ${bcount[k]}</span>`).join('')}</div>
+    </div>
+  </div>
+  <div class="card"><h2>Party balances</h2><div class="tw"><table><thead><tr><th>Party</th><th class="num">SAR</th><th class="num">AED</th><th class="num">INR</th></tr></thead><tbody>${balRows || '<tr><td colspan="4" class="empty">No balances</td></tr>'}</tbody></table></div>
+    <div class="small muted" style="margin-top:10px">Positive = party holds money or owes it to the operator. Balances are calculated from ledger entries, never typed in.</div></div>
+  <div class="card"><div class="cardh"><h2>Recent deals</h2><a class="link" href="#/deals">View all</a></div>${dealTable(recent)}</div>`;
+}
+
+function dealTable(list, showFoot) {
+  if (!list.length) return '<div class="empty">No deals match</div>';
+  const rows = list.map(d => { const c = dealCalc(d); return `<tr class="${d.status === 'cancelled' ? 'dim' : ''}">
+    <td>${dealLink(d)}<div class="small muted">${fdate(d.dealDate)}</div></td>
+    <td>${esc(pname(d.saudiAgentId))}</td>
+    <td>${esc(d.recipientName)}<div class="small muted">${esc(rname(d.regionId))}</div></td>
+    <td class="num">${money(d.sarAmount, 'SAR')}</td><td class="num">${rate(d.dealRate)}${d.rateOverride ? ' <span title="Manual override" style="color:var(--warn)">●</span>' : ''}<div class="small muted">mkt ${rate(d.marketRate)}</div></td><td class="num">${money(d.inrPayout, 'INR')}</td>
+    <td class="num">${d.status === 'cancelled' ? '—' : signed(c.net, 'INR') + `<div class="small muted">${c.settled ? 'actual' : 'estimated'}</div>`}</td>
+    <td>${d.batchId ? batchLink(batch(d.batchId)) : '<span class="muted">—</span>'}</td>
+    <td>${d.distributorId ? esc(pname(d.distributorId)) : '<span class="muted">—</span>'}</td>
+    <td>${dBadge(d)}</td></tr>`; }).join('');
+  let foot = '';
+  if (showFoot) {
+    const l = list.filter(d => d.status !== 'cancelled');
+    foot = `<tfoot><tr><td colspan="3">${l.length} active deals</td><td class="num">${money(l.reduce((s, d) => s + d.sarAmount, 0), 'SAR')}</td><td></td><td class="num">${money(l.reduce((s, d) => s + d.inrPayout, 0), 'INR')}</td><td class="num">${money(l.reduce((s, d) => s + dealCalc(d).net, 0), 'INR')}</td><td colspan="3"></td></tr></tfoot>`;
+  }
+  return `<div class="tw"><table class="wide"><thead><tr><th>Deal</th><th>Saudi agent</th><th>Recipient</th><th class="num">SAR</th><th class="num">Deal rate</th><th class="num">INR payout</th><th class="num">Net profit</th><th>Batch</th><th>Distributor</th><th>Status</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div>`;
+}
+
+function pageDeals() {
+  const f = UI.deals;
+  const q = f.q.toLowerCase();
+  const list = S.deals.filter(d =>
+    (!q || [d.dealNo, d.recipientName, d.recipientPhone, d.recipientAddress].join(' ').toLowerCase().includes(q)) &&
+    (!f.status || d.status === f.status) && (!f.agent || d.saudiAgentId === f.agent) && (!f.region || d.regionId === f.region) &&
+    (!f.dist || d.distributorId === f.dist) && (!f.from || d.dealDate >= f.from) && (!f.to || d.dealDate <= f.to)
+  ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return `
+  <div class="head"><div><h1>Deals</h1><div class="muted small">Each deal records SAR collected by a Saudi agent and the INR promised to a recipient in India</div></div>
+  </div>
+  <div class="card">
+    <div class="filters">
+      <input id="f-q" data-filter="deals.q" placeholder="Search deal no, recipient, phone, address" value="${esc(f.q)}" style="flex:2 1 220px">
+      <select data-filter="deals.status"><option value="">All statuses</option>${Object.keys(DS).map(k => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${DS[k][0]}</option>`).join('')}</select>
+      <select data-filter="deals.agent">${opts(partiesOf('saudi_agent', true), f.agent, 'All Saudi agents')}</select>
+      <select data-filter="deals.region">${opts(S.regions, f.region, 'All regions')}</select>
+      <select data-filter="deals.dist">${opts(partiesOf('distributor', true), f.dist, 'All distributors')}</select>
+      <input type="date" data-filter="deals.from" value="${f.from}" title="From date">
+      <input type="date" data-filter="deals.to" value="${f.to}" title="To date">
+      <button class="btn" data-act="clearDealFilters" style="flex:0 0 auto">Clear</button>
+    </div>
+    ${dealTable(list, true)}
+  </div>`;
+}
+
+function pageDeal(id) {
+  const d = deal(id); if (!d) return notFound();
+  const c = dealCalc(d), b = d.batchId ? batch(d.batchId) : null;
+  const canChange = !d.batchId && !['completed', 'cancelled'].includes(d.status);
+  const actions = [];
+  if (['pending_allocation', 'assigned'].includes(d.status)) actions.push(`<button class="btn pri" data-act="assignDist" data-id="${d.id}">${d.status === 'assigned' ? 'Reassign distributor' : 'Assign distributor'}</button>`);
+  if (d.status === 'assigned') actions.push(`<button class="btn pri" data-act="advanceDeal" data-id="${d.id}">Mark out for delivery</button>`);
+  if (d.status === 'out_for_delivery') actions.push(`<button class="btn pri" data-act="advanceDeal" data-id="${d.id}">Mark completed (paid)</button>`);
+  if (canChange) actions.push(`<button class="btn" data-act="reverseDeal" data-id="${d.id}">Reverse &amp; re-enter</button>`, `<button class="btn dan" data-act="cancelDeal" data-id="${d.id}">Cancel deal</button>`);
+  const repl = d.replacesDealId ? deal(d.replacesDealId) : null;
+  const replacedBy = S.deals.find(x => x.replacesDealId === d.id);
+  return `
+  <div class="crumb"><a href="#/deals">Deals</a> / ${d.dealNo}</div>
+  <div class="head"><div><h1>${d.dealNo} · ${esc(d.recipientName)}</h1><div class="row" style="margin-top:6px">${dBadge(d)} ${LOCK}
+    ${repl ? `<span class="small muted">Re-entry of ${dealLink(repl)}</span>` : ''}${replacedBy ? `<span class="small muted">Replaced by ${dealLink(replacedBy)}</span>` : ''}</div></div>
+    <div class="row">${actions.join('')}</div></div>
+  ${d.status === 'cancelled' ? '' : steps(DS_FLOW, DS, d.status)}
+  ${b && !canChange && d.status !== 'completed' && b.status !== 'settled' ? `<div class="alert">This deal is in batch ${b.batchNo}. To correct it, reverse the batch first.</div>` : ''}
+  <div class="card"><h2>Rate chain</h2>
+    <div class="chain">
+      <div class="c"><div class="l">SAR collected</div><div class="v">${money(d.sarAmount, 'SAR')}</div><div class="r">by ${esc(pname(d.saudiAgentId))}</div></div>
+      <div class="c"><div class="l">INR promised</div><div class="v">${money(d.inrPayout, 'INR')}</div><div class="r">deal rate <b>${rate(d.dealRate)}</b> · market ${rate(d.marketRate)}</div></div>
+      <div class="c"><div class="l">INR yield from Dubai</div><div class="v">${money(c.yieldInr, 'INR')}</div><div class="r">${c.settled ? 'effective ' + rate(c.effRate) + ' · ' + batchLink(b) : 'estimated @ ref ' + rate(c.effRate)}</div></div>
+      <div class="c"><div class="l">Operator net profit</div><div class="v ${c.net >= 0 ? 'pos' : 'neg'}">${money(c.net, 'INR')}</div><div class="r">spread ${money(c.gross, 'INR')} − fee ${money(c.fee, 'INR')}${c.feeExpected ? ' (expected)' : ''}</div></div>
+    </div>
+    ${b && b.status === 'settled' ? `<div class="small muted" style="margin-top:10px">Batch ${b.batchNo}: avg SAR → AED ${rate(b.sarToAedRate)}, avg AED → INR (net) ${rate(b.aedToInrRate)} ⇒ effective SAR → INR ${rate(c.effRate)}. Locked at settlement.</div>` : ''}
+  </div>
+  <div class="card"><h2>Rates on this deal ${LOCK}</h2>
+    <div class="chain">
+      <div class="c"><div class="l">Market at entry</div><div class="v">${rate(d.marketRate)}</div><div class="r">${fdt(d.createdAt)}</div></div>
+      <div class="c"><div class="l">Slab</div><div class="v" style="font-size:15px">${d.slab ? esc(d.slab.label) : '—'}</div><div class="r">market − ${d.slab ? d.slab.discount.toFixed(2) : '0'} = ${rate(d.suggestedRate)}</div></div>
+      <div class="c"><div class="l">Deal rate given</div><div class="v">${rate(d.dealRate)}</div><div class="r">${d.rateOverride ? '<span style="color:var(--warn)">manual override</span>' : 'slab rate'} · ${rate(R6(d.marketRate - d.dealRate))} below market</div></div>
+      <div class="c"><div class="l">Kept vs market</div><div class="v">${money(R2(d.sarAmount * (d.marketRate - d.dealRate)), 'INR')}</div><div class="r">expected Dubai yield ${rate(d.estSarInrRate)}</div></div>
+    </div></div>
+  <div class="grid g2">
+    <div class="card"><h2>Recipient &amp; delivery</h2><dl class="kv">
+      <dt>Name</dt><dd>${esc(d.recipientName)}</dd><dt>Phone</dt><dd>${esc(d.recipientPhone) || '—'}</dd>
+      <dt>Address</dt><dd>${esc(d.recipientAddress) || '—'}</dd><dt>Region</dt><dd>${esc(rname(d.regionId))}</dd>
+      <dt>Distributor</dt><dd>${d.distributorId ? partyLink(d.distributorId) : '—'}</dd><dt>Delivery fee</dt><dd>${money(d.distributorFeeInr, 'INR')}</dd>
+      <dt>Deal date</dt><dd>${fdate(d.dealDate)}</dd><dt>Saudi agent</dt><dd>${partyLink(d.saudiAgentId)}</dd>
+      <dt>Batch</dt><dd>${b ? batchLink(b) + ' ' + bBadge(b) : '—'}</dd>
+    </dl></div>
+    <div class="card"><h2>History</h2>${d.history.slice().reverse().map(h => `<div class="hist"><div class="row"><span class="badge ${DS[h.status][1]}">${DS[h.status][0]}</span><span class="small muted">${fdt(h.at)}</span></div>${h.note ? `<div class="small" style="margin-top:2px">${esc(h.note)}</div>` : ''}</div>`).join('')}</div>
+  </div>`;
+}
+
+function pageBatches() {
+  const list = [...S.batches].sort((a, b) => b.createdOn.localeCompare(a.createdOn) || b.batchNo.localeCompare(a.batchNo));
+  const unb = S.deals.filter(d => !d.batchId && d.status !== 'cancelled');
+  return `
+  <div class="head"><div><h1>Transit Batches</h1><div class="muted small">Pool SAR from deals → hand to Dubai → convert to AED → settle INR with the Dubai agent</div></div>
+  </div>
+  ${unb.length ? `<div class="alert">${unb.length} deals (${money(unb.reduce((s, d) => s + d.sarAmount, 0), 'SAR')}) are not in any batch yet.</div>` : ''}
+  <div class="card"><div class="tw"><table><thead><tr><th>Batch</th><th>Date</th><th class="num">Deals</th><th class="num">SAR</th><th class="num">SAR→AED</th><th class="num">AED</th><th class="num">AED→INR</th><th class="num">INR yield</th><th class="num">Net profit</th><th>Status</th></tr></thead><tbody>
+  ${list.map(b => { const ds = b.dealIds.map(deal); const prof = b.status === 'settled' && !b.reversed ? ds.reduce((s, d) => s + dealCalc(d).net, 0) : null;
+    return `<tr class="${b.reversed ? 'dim' : ''}"><td>${batchLink(b)}</td><td>${fdate(b.createdOn)}</td><td class="num">${b.dealIds.length}</td><td class="num">${money(b.sarTotal, 'SAR')}</td><td class="num">${rate(b.sarToAedRate)}</td><td class="num">${money(b.aedAmount, 'AED')}</td><td class="num">${rate(b.aedToInrRate)}</td><td class="num">${money(b.inrYield, 'INR')}</td><td class="num">${prof == null ? '—' : signed(prof, 'INR')}</td><td>${bBadge(b)}</td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No batches yet</td></tr>'}
+  </tbody></table></div></div>`;
+}
+
+function pageBatch(id) {
+  const b = batch(id); if (!b) return notFound();
+  const ds = b.dealIds.map(deal);
+  const payout = ds.reduce((s, d) => s + d.inrPayout, 0);
+  const fees = ds.reduce((s, d) => s + dealCalc(d).fee, 0);
+  const settled = b.status === 'settled';
+  const allocs = S.allocations.filter(a => a.batchId === b.id);
+  const allocated = allocs.reduce((s, a) => s + a.inrAmount, 0);
+  const margin = b.dubaiMargin ?? null;
+  let panel = '';
+  if (b.reversed) panel = `<div class="card"><h2>Reversed</h2><div class="muted">${fdt(b.reversed.at)} · ${esc(b.reversed.reason)}. Its deals were released and can go into a new batch.</div></div>`;
+  else if (b.status === 'collected_saudi') panel = `<div class="card"><h2>Step 2 · Hand over to Dubai collector</h2>
+    <form data-form="transit" data-id="${b.id}" class="row"><select name="dubaiCollectorId" style="flex:1 1 220px">${opts(partiesOf('dubai_collector'), '', 'Choose Dubai collector')}</select><button class="btn pri">Mark in transit</button></form></div>`;
+  else {
+    const sarLeft = R2(b.sarTotal - (b.sarConverted || 0)), aedLeft = R2((b.aedAmount || 0) - (b.aedSettled || 0));
+    const pc = (x, y) => y > 0 ? Math.min(100, x / y * 100) : 0;
+    const agentField = b.dubaiAgentId ? `<label class="f">Dubai agent<input value="${esc(pname(b.dubaiAgentId))}" disabled></label>` : `<label class="f">Dubai agent<select name="dubaiAgentId">${opts(partiesOf('dubai_agent'), partiesOf('dubai_agent')[0]?.id)}</select></label>`;
+    const forms = settled ? '' : `<div class="grid g2" style="margin-top:16px">
+      <div>${sarLeft > 0.004 ? `<form data-form="convert" data-live="convert" data-id="${b.id}"><h2 style="font-size:14px">Record a conversion part · SAR → AED</h2><div class="fg">
+          <label class="f">SAR in this part <span class="muted">(left ${money(sarLeft, 'SAR')})</span><input name="sar" type="number" step="any" min="0" value="${sarLeft}" required></label>
+          <label class="f">SAR → AED rate<input name="rate" type="number" step="any" min="0" placeholder="e.g. 0.9790" required></label>
+          <label class="f full">Note<input name="note" placeholder="optional, e.g. morning exchange"></label>
+          <div class="preview full" id="pv-convert"></div></div>
+          <div class="row" style="margin-top:10px"><button class="btn pri">Add conversion part</button></div></form>` : '<div class="preview">All SAR converted ✓</div>'}</div>
+      <div>${aedLeft > 0.004 ? `<form data-form="settle" data-live="settle" data-id="${b.id}"><h2 style="font-size:14px">Record a settlement part · AED → INR</h2><div class="fg">
+          ${agentField}
+          <label class="f">AED in this part <span class="muted">(unsettled ${money(aedLeft, 'AED')})</span><input name="aed" type="number" step="any" min="0" value="${aedLeft}" required></label>
+          <label class="f">Net AED → INR rate<input name="rate" type="number" step="any" min="0" placeholder="e.g. 25.32" required></label>
+          <label class="f">Market AED → INR <span class="muted">(optional)</span><input name="marketRate" type="number" step="any" min="0" placeholder="e.g. 25.48"></label>
+          <label class="f full">Note<input name="note" placeholder="optional"></label>
+          <div class="preview full" id="pv-settle"></div></div>
+          <div class="row" style="margin-top:10px"><button class="btn pri">Add settlement part</button></div></form>` : `<div class="preview">${b.aedAmount ? 'All converted AED is settled ✓' : 'Convert some SAR first. AED can be settled part by part as it is converted.'}</div>`}</div>
+    </div>`;
+    const partRow = (kind, t, cols) => `<tr class="${t.reversed ? 'dim' : ''}"><td>${fdt(t.at)}</td>${cols}<td class="small">${esc(t.note) || ''}${t.reversed ? `<div class="neg">Reversed: ${esc(t.reversed.reason)}</div>` : ''}</td><td class="num">${!settled && !t.reversed ? `<button class="btn sm dan" data-act="reverseTranche" data-id="${b.id}" data-kind="${kind}" data-tid="${t.id}">Reverse</button>` : ''}</td></tr>`;
+    panel = `<div class="card"><div class="cardh"><h2>Conversion &amp; settlement in parts</h2>${settled ? LOCK : '<span class="small muted">Locks when all SAR is converted and all AED settled</span>'}</div>
+      <div class="grid g2">
+        <div><div class="row small" style="justify-content:space-between"><span>SAR converted</span><span class="num">${money(b.sarConverted || 0, 'SAR')} / ${money(b.sarTotal, 'SAR')}</span></div><div class="bar" style="margin-top:6px"><i style="width:${pc(b.sarConverted, b.sarTotal)}%"></i></div><div class="small muted" style="margin-top:4px">avg SAR → AED ${rate(b.sarToAedRate)}</div></div>
+        <div><div class="row small" style="justify-content:space-between"><span>AED settled</span><span class="num">${money(b.aedSettled || 0, 'AED')} / ${money(b.aedAmount || 0, 'AED')}</span></div><div class="bar" style="margin-top:6px"><i style="width:${pc(b.aedSettled, b.aedAmount)}%"></i></div><div class="small muted" style="margin-top:4px">avg AED → INR ${rate(b.aedToInrRate)}</div></div>
+      </div>
+      ${forms}
+      ${(b.conversions || []).length ? `<h2 style="font-size:14px;margin-top:18px">Conversion parts</h2><div class="tw"><table><thead><tr><th>When</th><th class="num">SAR</th><th class="num">Rate</th><th class="num">AED</th><th>Note</th><th></th></tr></thead><tbody>
+        ${b.conversions.map(t => partRow('conv', t, `<td class="num">${money(t.sar, 'SAR')}</td><td class="num">${rate(t.rate)}</td><td class="num">${money(t.aed, 'AED')}</td>`)).join('')}</tbody></table></div>` : ''}
+      ${(b.settlements || []).length ? `<h2 style="font-size:14px;margin-top:18px">Settlement parts · ${esc(pname(b.dubaiAgentId))}</h2><div class="tw"><table><thead><tr><th>When</th><th class="num">AED</th><th class="num">Net rate</th><th class="num">Market</th><th class="num">INR</th><th>Note</th><th></th></tr></thead><tbody>
+        ${b.settlements.map(t => partRow('settle', t, `<td class="num">${money(t.aed, 'AED')}</td><td class="num">${rate(t.rate)}</td><td class="num">${rate(t.marketRate)}</td><td class="num">${money(t.inr, 'INR')}</td>`)).join('')}</tbody></table></div>` : ''}
+    </div>`;
+    if (b.inrYield > 0) panel += `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">INR paid by Dubai agent to distributors</h2><button class="btn pri sm" data-act="addAlloc" data-id="${b.id}" ${allocated >= b.inrYield - 0.004 ? 'disabled' : ''}>+ Record payment</button></div>
+    <div style="margin:12px 0"><div class="bar"><i style="width:${Math.min(100, allocated / b.inrYield * 100)}%"></i></div><div class="small muted" style="margin-top:4px">${money(allocated, 'INR')} of ${money(b.inrYield, 'INR')} paid out · ${money(b.inrYield - allocated, 'INR')} still with Dubai agent</div></div>
+    <div class="tw"><table><thead><tr><th>Date</th><th>Distributor</th><th>Note</th><th class="num">INR</th></tr></thead><tbody>${allocs.map(a => `<tr><td>${fdt(a.date)}</td><td>${partyLink(a.distributorId)}</td><td>${esc(a.note) || '<span class="muted">—</span>'}</td><td class="num">${money(a.inrAmount, 'INR')}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No payments recorded yet</td></tr>'}</tbody></table></div></div>`;
+  }
+  return `
+  <div class="crumb"><a href="#/batches">Transit Batches</a> / ${b.batchNo}</div>
+  <div class="head"><div><h1>Batch ${b.batchNo}</h1><div class="row" style="margin-top:6px">${bBadge(b)} ${settled ? LOCK : ''}<span class="small muted">Created ${fdate(b.createdOn)}</span></div></div>
+    <div class="row">${!b.reversed && !settled ? `<button class="btn dan" data-act="reverseBatch" data-id="${b.id}">Reverse batch</button>` : ''}</div></div>
+  ${b.reversed ? '' : steps(BS_FLOW, BS, b.status)}
+  <div class="card"><h2>SAR → AED → INR side by side</h2>
+    <div class="chain">
+      <div class="c"><div class="l">SAR pooled</div><div class="v">${money(b.sarTotal, 'SAR')}</div><div class="r">${esc(pname(b.saudiCollectorId))} → ${esc(b.dubaiCollectorId ? pname(b.dubaiCollectorId) : '…')}</div></div>
+      <div class="c"><div class="l">AED converted</div><div class="v">${money(b.aedAmount, 'AED')}</div><div class="r">avg SAR → AED ${rate(b.sarToAedRate)} · ${activeParts(b.conversions).length} part(s)</div></div>
+      <div class="c"><div class="l">INR from Dubai agent</div><div class="v">${money(b.inrYield, 'INR')}</div><div class="r">avg AED → INR ${rate(b.aedToInrRate)} · ${activeParts(b.settlements).length} part(s)</div></div>
+      <div class="c"><div class="l">Effective SAR → INR</div><div class="v">${settled ? rate(b.inrYield / b.sarTotal) : '—'}</div><div class="r">avg deal rate ${rate(payout / b.sarTotal)}</div></div>
+    </div>
+    ${settled ? `<div class="grid g3" style="margin-top:14px">
+      <div class="kpi"><div class="l">INR promised to recipients</div><div class="v">${money(payout, 'INR')}</div></div>
+      <div class="kpi"><div class="l">Gross spread − fees</div><div class="v">${money(b.inrYield - payout, 'INR')} − ${money(fees, 'INR')}</div></div>
+      <div class="kpi"><div class="l">Operator net profit</div><div class="v pos">${money(b.inrYield - payout - fees, 'INR')}</div>${margin != null ? `<div class="s">Dubai agent margin ${money(margin, 'INR')}</div>` : ''}</div>
+    </div>` : ''}
+  </div>
+  ${panel}
+  <div class="card"><h2>Deals in this batch</h2>${dealTable(ds, true)}</div>
+  <div class="card"><h2>History</h2>${b.history.slice().reverse().map(h => `<div class="hist"><div class="row"><span class="badge ${BS[h.status][1]}">${BS[h.status][0]}</span><span class="small muted">${fdt(h.at)}</span></div><div class="small">${esc(h.note || '')}</div></div>`).join('')}</div>`;
+}
+
+function pageParties() {
+  const bal = balances(deriveLedger());
+  const t = UI.partyTab;
+  const list = partiesOf(t, true);
+  const cur = BAL_LABEL[t];
+  return `
+  <div class="head"><div><h1>Parties &amp; Ledgers</h1><div class="muted small">Profiles and running balances for everyone in the chain</div></div>
+    <button class="btn pri" data-act="editParty" data-type="${t}">+ Add ${PT1[t]}</button></div>
+  <div class="tabs">${Object.keys(PT).map(k => `<a href="#" data-act="partyTab" data-tab="${k}" class="${k === t ? 'on' : ''}">${PT[k]} <span class="muted">${partiesOf(k, true).length}</span></a>`).join('')}</div>
+  <div class="card"><div class="tw"><table><thead><tr><th>Name</th><th>Phone</th>${t === 'distributor' ? '<th>Region</th>' : ''}<th class="num">${cur[1]}</th><th></th></tr></thead><tbody>
+  ${list.map(p => { const b = bal[p.id] || {SAR: 0, AED: 0, INR: 0};
+    const nz = ['SAR', 'AED', 'INR'].filter(c => Math.abs(b[c]) > 0.004); const v = nz.length ? nz.map(c => money(b[c], c)).join('<br>') : money(0, cur[0].slice(0, 3));
+    return `<tr class="${p.active ? '' : 'dim'}"><td>${partyLink(p.id)}${p.active ? '' : ' <span class="badge">inactive</span>'}</td><td>${esc(p.phone) || '—'}</td>${t === 'distributor' ? `<td>${esc(rname(p.regionId))}</td>` : ''}<td class="num">${v}</td><td class="num"><button class="btn sm" data-act="editParty" data-id="${p.id}">Edit</button></td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">None yet</td></tr>'}
+  </tbody></table></div></div>`;
+}
+
+function pageParty(id) {
+  const p = party(id); if (!p) return notFound();
+  const E = deriveLedger().filter(e => e.partyId === id);
+  const curs = ['SAR', 'AED', 'INR'].filter(c => E.some(e => e.cur === c));
+  const ledgers = curs.map(c => {
+    let run = 0;
+    const rows = E.filter(e => e.cur === c).map(e => { run = R2(run + e.amt);
+      const link = e.ref.kind === 'deal' ? `<a href="#/deal/${e.ref.id}">${e.ref.no}</a>` : e.ref.kind === 'capital' ? `<a href="#/capital">${e.ref.no}</a>` : `<a href="#/batch/${e.ref.id}">${e.ref.no}</a>`;
+      return `<tr class="${e.rev ? 'dim' : ''}"><td>${fdt(e.date)}</td><td>${link}</td><td>${esc(e.memo)}</td><td class="num">${e.amt > 0 ? money(e.amt, c) : ''}</td><td class="num">${e.amt < 0 ? money(-e.amt, c) : ''}</td><td class="num"><b>${money(run, c)}</b></td></tr>`; });
+    return `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${c} ledger</h2><span>Balance <b>${signed(run, c)}</b></span></div>
+      <div class="tw" style="margin-top:10px"><table><thead><tr><th>Date</th><th>Ref</th><th>Description</th><th class="num">In (+)</th><th class="num">Out (−)</th><th class="num">Balance</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
+  }).join('');
+  const myDeals = p.type === 'saudi_agent' ? S.deals.filter(d => d.saudiAgentId === id) : p.type === 'distributor' ? S.deals.filter(d => d.distributorId === id) : [];
+  return `
+  <div class="crumb"><a href="#/parties" data-act="partyTab" data-tab="${p.type}">Parties</a> / ${esc(p.name)}</div>
+  <div class="head"><div><h1>${esc(p.name)}</h1><div class="row small muted" style="margin-top:4px"><span class="badge">${PT1[p.type]}</span>${esc(p.phone)}${p.regionId ? ' · ' + esc(rname(p.regionId)) : ''}${p.notes ? ' · ' + esc(p.notes) : ''}</div></div>
+    <button class="btn" data-act="editParty" data-id="${p.id}">Edit</button></div>
+  ${ledgers || '<div class="card empty">No transactions yet</div>'}
+  ${myDeals.length ? `<div class="card"><h2>${p.type === 'saudi_agent' ? 'Deals booked' : 'Payouts assigned'}</h2>${dealTable(myDeals, true)}</div>` : ''}`;
+}
+
+function reportData() {
+  const r = UI.report;
+  const ds = S.deals.filter(d => d.status !== 'cancelled' && (!r.from || d.dealDate >= r.from) && (!r.to || d.dealDate <= r.to));
+  const key = {agent: d => pname(d.saudiAgentId), region: d => rname(d.regionId), dist: d => d.distributorId ? pname(d.distributorId) : 'Unassigned',
+    batch: d => d.batchId ? batch(d.batchId).batchNo : 'Not batched', status: d => DS[d.status][0], date: d => d.dealDate}[r.group];
+  const g = new Map();
+  for (const d of ds) {
+    const k = key(d); const c = dealCalc(d);
+    const x = g.get(k) || {k, n: 0, sar: 0, payout: 0, yieldA: 0, sarA: 0, fees: 0, real: 0, est: 0, mktInr: 0};
+    x.mktInr += d.sarAmount * d.marketRate;
+    x.n++; x.sar += d.sarAmount; x.payout += d.inrPayout; x.fees += c.fee;
+    if (c.settled) { x.real += c.net; x.yieldA += c.yieldInr; x.sarA += d.sarAmount; } else x.est += c.net;
+    g.set(k, x);
+  }
+  return [...g.values()].sort((a, b) => String(a.k).localeCompare(String(b.k)));
+}
+function pageReports() {
+  const r = UI.report, rows = reportData();
+  const tot = rows.reduce((t, x) => { for (const k of ['n', 'sar', 'payout', 'yieldA', 'sarA', 'fees', 'real', 'est', 'mktInr']) t[k] += x[k]; return t; }, {n: 0, sar: 0, payout: 0, yieldA: 0, sarA: 0, fees: 0, real: 0, est: 0, mktInr: 0});
+  const tr = (x, foot) => `<tr><td>${foot ? 'Total' : esc(x.k)}</td><td class="num">${x.n}</td><td class="num">${money(x.sar, 'SAR')}</td><td class="num">${rate(x.mktInr / x.sar)}</td><td class="num">${rate(x.payout / x.sar)}</td><td class="num">${x.sarA ? rate(x.yieldA / x.sarA) : '—'}</td><td class="num">${money(x.payout, 'INR')}</td><td class="num">${money(x.fees, 'INR')}</td><td class="num">${signed(x.real, 'INR')}</td><td class="num">${money(x.est, 'INR')}</td></tr>`;
+  const bs = S.batches.filter(b => activeBatch(b) && b.status === 'settled' && (!r.from || b.createdOn >= r.from) && (!r.to || b.createdOn <= r.to));
+  const G = {agent: 'Saudi agent', region: 'Region', dist: 'Distributor', batch: 'Batch', status: 'Status', date: 'Deal date'};
+  return `
+  <div class="head"><div><h1>Reports</h1><div class="muted small">Operator profit and rate difference across deals and date ranges</div></div>
+    <button class="btn" data-act="exportCsv">Export CSV</button></div>
+  <div class="card"><div class="filters">
+    <label class="f">From<input type="date" data-filter="report.from" value="${r.from}"></label>
+    <label class="f">To<input type="date" data-filter="report.to" value="${r.to}"></label>
+    <label class="f">Group by<select data-filter="report.group">${Object.entries(G).map(([k, v]) => `<option value="${k}" ${r.group === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
+  <h2>Profit by ${G[r.group].toLowerCase()}</h2>
+  <div class="tw"><table><thead><tr><th>${G[r.group]}</th><th class="num">Deals</th><th class="num">SAR</th><th class="num">Avg market</th><th class="num">Avg deal rate</th><th class="num">Avg Dubai rate</th><th class="num">INR payout</th><th class="num">Fees</th><th class="num">Realised profit</th><th class="num">Estimated (unsettled)</th></tr></thead>
+  <tbody>${rows.map(x => tr(x)).join('') || '<tr><td colspan="10" class="empty">No deals in range</td></tr>'}</tbody>${rows.length ? `<tfoot>${tr(tot, true)}</tfoot>` : ''}</table></div></div>
+  <div class="card"><h2>Rate difference by settled batch</h2>
+  <div class="tw"><table><thead><tr><th>Batch</th><th class="num">SAR</th><th class="num">SAR→AED</th><th class="num">AED→INR net</th><th class="num">Effective SAR→INR</th><th class="num">Avg deal rate</th><th class="num">Spread / SAR</th><th class="num">Dubai agent margin</th><th class="num">Net profit</th></tr></thead><tbody>
+  ${bs.map(b => { const ds = b.dealIds.map(deal); const pay = ds.reduce((s, d) => s + d.inrPayout, 0), fee = ds.reduce((s, d) => s + dealCalc(d).fee, 0);
+    const eff = b.inrYield / b.sarTotal, avg = pay / b.sarTotal;
+    return `<tr><td>${batchLink(b)}</td><td class="num">${money(b.sarTotal, 'SAR')}</td><td class="num">${rate(b.sarToAedRate)}</td><td class="num">${rate(b.aedToInrRate)}</td><td class="num">${rate(eff)}</td><td class="num">${rate(avg)}</td><td class="num">${rate(eff - avg)}</td><td class="num">${b.dubaiMargin != null ? money(b.dubaiMargin, 'INR') : '—'}</td><td class="num">${signed(b.inrYield - pay - fee, 'INR')}</td></tr>`; }).join('') || '<tr><td colspan="9" class="empty">No settled batches in range</td></tr>'}
+  </tbody></table></div></div>`;
+}
+
+function pageSettings() {
+  const s = S.settings, log = s.rateLog.slice().reverse();
+  const slabs = [...s.slabs].sort((a, b) => a.minSar - b.minSar);
+  return `
+  <div class="head"><div><h1>Settings</h1><div class="muted small">Rates change all day. Update the market here or from the button in the top bar.</div></div></div>
+  <div class="grid g2">
+    <div class="card"><div class="cardh"><h2>Today's rates</h2><button class="btn pri sm" data-act="rates">Update rates</button></div>
+      <div class="chain" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div class="c"><div class="l">Market SAR → INR</div><div class="v">${rate(s.marketSarInrRate)}</div></div>
+        <div class="c"><div class="l">Expected Dubai yield</div><div class="v">${rate(s.referenceSarInrRate)}</div><div class="r">SAR → INR via AED</div></div>
+        <div class="c"><div class="l">AED → INR ref</div><div class="v">${rate(s.referenceAedInrRate)}</div></div>
+      </div>
+      ${log.length > 1 ? `<div style="margin-top:14px"><div class="small muted" style="margin-bottom:4px">Market rate trend</div>${sparkline(s.rateLog.map(x => x.market - Math.min(...s.rateLog.map(y => y.market)) + 0.01)).replace('class="spark"', 'class="spark" style="width:100%;height:48px" preserveAspectRatio="none"')}</div>` : ''}
+      <div class="tw" style="margin-top:10px;max-height:240px;overflow:auto"><table><thead><tr><th>Updated</th><th class="num">Market</th><th class="num">Dubai yield</th><th class="num">AED→INR</th><th>Note</th></tr></thead><tbody>
+        ${log.map(x => `<tr><td>${fdt(x.at)}</td><td class="num">${rate(x.market)}</td><td class="num">${rate(x.yieldRate)}</td><td class="num">${rate(x.aed)}</td><td class="small muted">${esc(x.note) || '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No rate updates yet</td></tr>'}
+      </tbody></table></div></div>
+    <div class="card"><h2>Bulk rate slabs</h2>
+      <div class="small muted" style="margin-bottom:10px">Bigger deals get a rate closer to market. Each slab is a discount below the market rate, so suggestions move with the market. Every deal can still be overridden.</div>
+      <form data-form="slabs"><div class="tw"><table><thead><tr><th>From SAR</th><th>Discount below market</th><th class="num">Rate at ${rate(s.marketSarInrRate)}</th><th class="num">e.g. INR per 1 lakh SAR</th><th></th></tr></thead><tbody>
+        ${slabs.map((x, i) => `<tr data-slab><td><input name="minSar" type="number" step="any" min="0" value="${x.minSar}" style="width:120px"></td><td><input name="discount" type="number" step="any" value="${x.discount}" style="width:90px"></td><td class="num"><b>${rate(R6(s.marketSarInrRate - x.discount))}</b></td><td class="num muted">${money(100000 * (s.marketSarInrRate - x.discount), 'INR')}</td><td class="num"><button type="button" class="btn sm dan" data-act="delSlab" data-i="${s.slabs.indexOf(x)}" ${slabs.length < 2 ? 'disabled' : ''}>Remove</button></td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="row" style="margin-top:12px"><button type="button" class="btn sm" data-act="addSlab">+ Add slab</button><span style="flex:1"></span><button class="btn pri">Save slabs</button></div></form></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h2>Defaults</h2>
+      <form data-form="settings"><label class="f">Default distributor delivery fee (INR)<input name="defaultDistributorFeeInr" type="number" step="any" value="${s.defaultDistributorFeeInr}"></label>
+      <div class="row" style="margin-top:12px"><button class="btn pri">Save</button></div></form></div>
+    <div class="card"><h2>Regions</h2>
+      <form data-form="region" class="row" style="margin-bottom:12px"><input name="name" placeholder="New region e.g. Bangalore" style="flex:1"><button class="btn">Add</button></form>
+      <table><tbody>${S.regions.map(r => `<tr><td>${esc(r.name)}</td><td class="num small muted">${S.parties.filter(p => p.regionId === r.id).length} distributors · ${S.deals.filter(d => d.regionId === r.id).length} deals</td></tr>`).join('')}</tbody></table></div>
+  </div>
+  <div class="card"><h2>How rates and corrections work</h2><div class="small" style="max-width:760px">
+    <ul style="margin:0;padding-left:18px"><li>Every deal stores its <b>own</b> market rate, deal rate, slab and expected Dubai yield. Changing today's rates never alters saved deals.</li>
+    <li>Every batch stores its <b>own</b> SAR → AED and AED → INR rates, entered at each step.</li>
+    <li>Saved deals and settled batches are <b>locked</b>. A deal not yet in a batch can be fixed with <i>Reverse &amp; re-enter</i>. A deal in an unsettled batch needs the batch reversed first. Settled batches stay locked until the client decides how to handle them.</li></ul></div></div>`;
+}
+const notFound = () => '<div class="card empty">Not found. <a href="#/dashboard">Go to dashboard</a></div>';
+
+
+/* ============================ capital & position ============================ */
+const HOLDER_ORDER = ['operator', 'saudi_agent', 'saudi_collector', 'dubai_collector', 'dubai_agent', 'distributor'];
+function toInr(cur, amt) { const st = S.settings; return cur === 'INR' ? amt : cur === 'SAR' ? amt * st.referenceSarInrRate : amt * st.referenceAedInrRate; }
+function position() {
+  const bal = balances(deriveLedger());
+  const debtors = [], creditors = [], operatorCash = {SAR: 0, AED: 0, INR: 0, val: 0};
+  for (const type of HOLDER_ORDER) for (const p of partiesOf(type, true)) {
+    const b = bal[p.id]; if (!b) continue;
+    for (const c of ['SAR', 'AED', 'INR']) {
+      const a = b[c]; if (Math.abs(a) < 0.005) continue;
+      if (type === 'operator') { operatorCash[c] += a; operatorCash.val += toInr(c, a); continue; }
+      (a > 0 ? debtors : creditors).push({kind: 'party', partyId: p.id, type, cur: c, amt: Math.abs(a), val: toInr(c, Math.abs(a)),
+        why: a > 0 ? BAL_LABEL[type][1] : 'Paid out more than received'});
+    }
+  }
+  const open = S.deals.filter(d => !['cancelled', 'completed'].includes(d.status));
+  const today = new Date(todayStr() + 'T00:00:00');
+  open.forEach(d => creditors.push({kind: 'recipient', deal: d, cur: 'INR', amt: d.inrPayout, val: d.inrPayout,
+    age: Math.round((today - new Date(d.dealDate + 'T00:00:00')) / 864e5)}));
+  const feeBy = new Map();
+  open.forEach(d => { const c = dealCalc(d); const k = d.distributorId || ''; feeBy.set(k, (feeBy.get(k) || 0) + c.fee); });
+  feeBy.forEach((amt, k) => amt > 0 && creditors.push({kind: 'fee', partyId: k || null, cur: 'INR', amt, val: amt}));
+  const sum = (l, f = () => true) => R2(l.filter(f).reduce((s, x) => s + x.val, 0));
+  const capital = R2(S.capital.reduce((s, c) => s + (c.kind === 'add' ? 1 : c.kind === 'withdraw' ? -1 : 0) * toInr(c.currency, c.amount), 0));
+  const live = S.deals.filter(d => d.status !== 'cancelled');
+  const realised = R2(live.filter(d => d.inrDubaiYield != null).reduce((s, d) => s + dealCalc(d).net, 0));
+  const estimated = R2(live.filter(d => d.inrDubaiYield == null).reduce((s, d) => s + dealCalc(d).net, 0));
+  const cash = R2(operatorCash.val), dTot = sum(debtors), cTot = sum(creditors);
+  const net = R2(cash + dTot - cTot);
+  return {debtors, creditors, operatorCash, cash, dTot, cTot, net, capital, realised, estimated, unrealised: R2(net - capital - realised),
+    recipientsTot: sum(creditors, x => x.kind === 'recipient'), feesTot: sum(creditors, x => x.kind === 'fee'), partyCredTot: sum(creditors, x => x.kind === 'party')};
+}
+function moneyMulti(rows) {
+  const by = {}; rows.forEach(r => by[r.cur] = (by[r.cur] || 0) + r.amt);
+  return Object.entries(by).map(([c, a]) => money(a, c)).join(' · ') || '—';
+}
+
+function pageCapital() {
+  const P = position(), st = S.settings;
+  const kindLbl = {add: ['Capital added', 'b-green'], withdraw: ['Withdrawn', 'b-red'], transfer: ['Moved', 'b-blue']};
+  const groups = HOLDER_ORDER.filter(t => t !== 'operator').map(t => {
+    const d = P.debtors.filter(x => x.type === t), c = P.creditors.filter(x => x.kind === 'party' && x.type === t);
+    return {t, d, c, val: R2(d.reduce((s, x) => s + x.val, 0) - c.reduce((s, x) => s + x.val, 0))};
+  }).filter(g => g.d.length || g.c.length);
+  return `
+  <div class="head"><div><h1>Capital</h1><div class="muted small">Your own money in the business, the profit on top of it, and where it all sits now</div></div>
+    <div class="row"><button class="btn" data-act="capital" data-kind="withdraw">Withdraw</button><button class="btn" data-act="capital" data-kind="transfer">Move funds</button><button class="btn pri" data-act="capital" data-kind="add">${icon('plus')}Add capital</button></div></div>
+  <div class="strip">
+    <div class="cell"><div class="l">Capital invested</div><div class="v">${cmp(P.capital, 'INR')}</div><div class="s">${S.capital.filter(c => c.kind !== 'transfer').length} capital entries</div></div>
+    <div class="cell"><div class="l">Realised profit</div><div class="v">${cmp(P.realised, 'INR')}</div><div class="s up">${icon('up')}settled deals, rates locked</div></div>
+    <div class="cell"><div class="l">Unrealised profit</div><div class="v">${cmp(P.unrealised, 'INR')}</div><div class="s">unsettled, at today's reference rates</div></div>
+    <div class="cell"><div class="l">Total capital employed</div><div class="v">${cmp(P.net, 'INR')}</div><div class="s">net position = capital + profit</div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><div class="cardh"><h2>Balance sheet</h2><a class="link" href="#/balances">Debtors &amp; creditors</a></div>
+      <dl class="kv money" style="grid-template-columns:1fr auto">
+        <dt>Operator cash in hand</dt><dd>${money(P.cash, 'INR')}</dd>
+        <dt>+ Debtors (money others hold for you)</dt><dd>${money(P.dTot, 'INR')}</dd>
+        <dt>− Creditors (what you owe)</dt><dd class="neg">− ${money(P.cTot, 'INR')}</dd>
+        <dt style="border-top:1px solid var(--border);padding-top:8px"><b style="color:var(--text)">= Net position</b></dt><dd style="border-top:1px solid var(--border);padding-top:8px"><b>${money(P.net, 'INR')}</b></dd>
+      </dl></div>
+    <div class="card"><h2>Reconciliation</h2>
+      <dl class="kv money" style="grid-template-columns:1fr auto">
+        <dt>Capital invested</dt><dd>${money(P.capital, 'INR')}</dd>
+        <dt>+ Realised profit</dt><dd>${money(P.realised, 'INR')}</dd>
+        <dt>+ Unrealised profit <span class="small">(deal-entry estimate ${money(P.estimated, 'INR')})</span></dt><dd>${money(P.unrealised, 'INR')}</dd>
+        <dt style="border-top:1px solid var(--border);padding-top:8px"><b style="color:var(--text)">= Net position</b></dt><dd style="border-top:1px solid var(--border);padding-top:8px"><b>${money(P.capital + P.realised + P.unrealised, 'INR')}</b></dd>
+      </dl>
+      <div class="small muted" style="margin-top:10px">SAR and AED still in the chain are valued at reference rates (SAR→INR ${rate(st.referenceSarInrRate)}, AED→INR ${rate(st.referenceAedInrRate)}, changeable in Settings). A big gap between unrealised and the deal-entry estimate means rates have moved since the deals were booked.</div></div>
+  </div>
+  <div class="card"><h2>Where the capital sits</h2><div class="tw"><table><thead><tr><th>Held by</th><th class="num">Amounts</th><th class="num">Value in INR</th></tr></thead><tbody>
+    <tr><td><b>Operator cash in hand</b></td><td class="num">${['SAR', 'AED', 'INR'].filter(c => Math.abs(P.operatorCash[c]) > 0.004).map(c => money(P.operatorCash[c], c)).join(' · ') || '—'}</td><td class="num">${money(P.cash, 'INR')}</td></tr>
+    ${groups.map(g => `<tr><td>${PT[g.t]}</td><td class="num">${moneyMulti(g.d)}${g.c.length ? `<div class="small neg">owed: ${moneyMulti(g.c)}</div>` : ''}</td><td class="num">${money(g.val, 'INR')}</td></tr>`).join('')}
+    <tr><td>Recipients awaiting payout <span class="muted small">(${P.creditors.filter(x => x.kind === 'recipient').length} deals)</span></td><td class="num"></td><td class="num neg">− ${money(P.recipientsTot, 'INR')}</td></tr>
+    <tr><td>Delivery fees due to distributors</td><td class="num"></td><td class="num neg">− ${money(P.feesTot, 'INR')}</td></tr>
+  </tbody><tfoot><tr><td>Net position</td><td></td><td class="num">${money(P.net, 'INR')}</td></tr></tfoot></table></div></div>
+  <div class="card"><h2>Capital register</h2><div class="tw"><table><thead><tr><th>Ref</th><th>Date</th><th>Type</th><th>From / held by</th><th>To</th><th>Note</th><th class="num">Amount</th></tr></thead><tbody>
+    ${[...S.capital].reverse().map(c => `<tr><td>${c.no}</td><td>${fdate(c.date)}</td><td><span class="badge ${kindLbl[c.kind][1]}">${kindLbl[c.kind][0]}</span></td><td>${partyLink(c.partyId)}</td><td>${c.toPartyId ? partyLink(c.toPartyId) : '<span class="muted">—</span>'}</td><td>${esc(c.note) || '<span class="muted">—</span>'}</td><td class="num">${c.kind === 'withdraw' ? '− ' : ''}${money(c.amount, c.currency)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No capital recorded yet</td></tr>'}
+  </tbody></table></div></div>`;
+}
+
+function pageBalances() {
+  const P = position();
+  const dRows = P.debtors.map(x => `<tr><td>${partyLink(x.partyId)}<div class="small muted">${PT1[x.type]}</div></td><td>${esc(x.why)}</td><td class="num">${money(x.amt, x.cur)}</td><td class="num">${money(x.val, 'INR')}</td></tr>`).join('');
+  const cParty = P.creditors.filter(x => x.kind === 'party').map(x => `<tr><td>${partyLink(x.partyId)}<div class="small muted">${PT1[x.type]}</div></td><td>${esc(x.why)}</td><td class="num">${money(x.amt, x.cur)}</td><td class="num">${money(x.val, 'INR')}</td></tr>`).join('');
+  const cFee = P.creditors.filter(x => x.kind === 'fee').map(x => `<tr><td>${x.partyId ? partyLink(x.partyId) : '<span class="muted">Not yet assigned</span>'}<div class="small muted">Indian Distributor</div></td><td>Delivery fees on open deals${x.partyId ? '' : ' (expected)'}</td><td class="num">${money(x.amt, 'INR')}</td><td class="num">${money(x.val, 'INR')}</td></tr>`).join('');
+  const rec = P.creditors.filter(x => x.kind === 'recipient').sort((a, b) => b.age - a.age);
+  const recRows = rec.map(x => { const d = x.deal; return `<tr><td>${esc(d.recipientName)}<div class="small muted">${esc(rname(d.regionId))}</div></td><td>${dealLink(d)}</td><td>${d.distributorId ? esc(pname(d.distributorId)) : '<span class="muted">—</span>'}</td><td>${dBadge(d)}</td><td class="num"><span class="${x.age > 7 ? 'neg' : ''}">${x.age} days</span></td><td class="num">${money(x.amt, 'INR')}</td></tr>`; }).join('');
+  return `
+  <div class="head"><div><h1>Debtors &amp; Creditors</h1><div class="muted small">Who owes you, and who you owe, right now. Built from the ledger; SAR/AED valued at reference rates.</div></div></div>
+  <div class="strip">
+    <div class="cell"><div class="l">Debtors · owed to you</div><div class="v pos">${cmp(P.dTot, 'INR')}</div><div class="s">${new Set(P.debtors.map(x => x.partyId)).size} parties</div></div>
+    <div class="cell"><div class="l">Creditors · you owe</div><div class="v neg">${cmp(P.cTot, 'INR')}</div><div class="s">${rec.length} recipients + ${P.creditors.filter(x => x.kind !== 'recipient').length} other</div></div>
+    <div class="cell"><div class="l">Operator cash in hand</div><div class="v">${cmp(P.cash, 'INR')}</div><div class="s"><a class="link" href="#/capital">Capital page</a></div></div>
+    <div class="cell"><div class="l">Net position</div><div class="v">${cmp(P.net, 'INR')}</div><div class="s">cash + debtors − creditors</div></div>
+  </div>
+  <div class="card"><div class="cardh"><h2>Debtors · owed to you</h2><span class="pill" style="background:var(--pos-soft);color:var(--pos)">${money(P.dTot, 'INR')}</span></div>
+    <div class="tw"><table><thead><tr><th>Party</th><th>Reason</th><th class="num">Amount</th><th class="num">Value in INR</th></tr></thead><tbody>${dRows || '<tr><td colspan="4" class="empty">Nobody owes you anything</td></tr>'}</tbody></table></div></div>
+  <div class="card"><div class="cardh"><h2>Creditors · you owe</h2><span class="pill" style="background:var(--danger-soft);color:var(--danger)">${money(P.cTot, 'INR')}</span></div>
+    <div class="tw"><table><thead><tr><th>Party</th><th>Reason</th><th class="num">Amount</th><th class="num">Value in INR</th></tr></thead><tbody>
+      ${cParty}${cFee}
+      <tr><td><b>Recipients awaiting payout</b><div class="small muted">${rec.length} open deals, listed below</div></td><td>INR promised, not yet delivered</td><td class="num">${money(P.recipientsTot, 'INR')}</td><td class="num">${money(P.recipientsTot, 'INR')}</td></tr>
+    </tbody></table></div></div>
+  <div class="card"><h2>Recipients awaiting payout · oldest first</h2>
+    <div class="tw"><table class="wide"><thead><tr><th>Recipient</th><th>Deal</th><th>Distributor</th><th>Status</th><th class="num">Age</th><th class="num">INR owed</th></tr></thead><tbody>${recRows || '<tr><td colspan="6" class="empty">All recipients paid</td></tr>'}</tbody></table></div></div>`;
+}
+
+/* ============================ modals ============================ */
+function dealForm(pre = {}) {
+  const st = S.settings, isRe = !!pre.replacesDealId;
+  const mkt = isRe ? pre.marketRate : st.marketSarInrRate, est = isRe ? pre.estSarInrRate : st.referenceSarInrRate;
+  return `<form data-form="deal" data-live="deal" id="dealForm"><input type="hidden" name="replacesDealId" value="${pre.replacesDealId || ''}">
+  ${isRe ? `<div class="alert">Correcting ${deal(pre.replacesDealId).dealNo}. The original will be cancelled with a reversal entry when you save.</div>` : ''}
+  <div class="fg">
+    <label class="f">Deal date<input name="dealDate" type="date" value="${pre.dealDate || todayStr()}" required></label>
+    <label class="f">Saudi agent<select name="saudiAgentId" required>${opts(partiesOf('saudi_agent'), pre.saudiAgentId, 'Choose agent')}</select></label>
+    <label class="f full">SAR received<input name="sarAmount" type="number" step="any" min="0" value="${pre.sarAmount ?? ''}" placeholder="e.g. 100000" required></label>
+    <label class="f">Market rate now (SAR → INR)<input name="marketRate" type="number" step="any" min="0" value="${mkt ?? ''}" required></label>
+    <label class="f">Deal rate given (SAR → INR) <span class="muted" id="rateMode"></span>
+      <div class="row" style="flex-wrap:nowrap"><input name="dealRate" type="number" step="any" min="0" value="${pre.dealRate ?? ''}" data-auto="${isRe ? '0' : '1'}" required><button type="button" class="btn sm" data-act="useSlab" title="Reset to slab rate">↺ Slab</button></div></label>
+    <label class="f">Expected Dubai yield (SAR → INR)<input name="estSarInrRate" type="number" step="any" min="0" value="${est ?? ''}" required></label>
+    <div class="preview" id="pv-deal" style="grid-row:span 2"></div>
+    <label class="f">Recipient name<input name="recipientName" value="${esc(pre.recipientName || '')}" required></label>
+    <label class="f">Recipient phone<input name="recipientPhone" value="${esc(pre.recipientPhone || '')}"></label>
+    <label class="f">Delivery region<select name="regionId" required>${opts(S.regions, pre.regionId, 'Choose region')}</select></label>
+    <label class="f full">Delivery address<textarea name="recipientAddress">${esc(pre.recipientAddress || '')}</textarea></label>
+  </div></form>`;
+}
+const LIVE = {
+  deal(f, target) {
+    const el = document.getElementById('pv-deal'); if (!el) return;
+    const dr = f.dealRate;
+    if (target === dr) dr.dataset.auto = '0';
+    const sar = num(f.sarAmount.value), mkt = num(f.marketRate.value), est = num(f.estSarInrRate.value), fee = S.settings.defaultDistributorFeeInr;
+    const sl = sar > 0 ? slabFor(sar) : null, sug = sar > 0 && mkt > 0 ? suggestRate(sar, mkt) : NaN;
+    if (dr.dataset.auto === '1' && sug > 0) dr.value = sug;
+    const r = num(dr.value);
+    document.getElementById('rateMode').innerHTML = dr.dataset.auto === '1' ? '· slab rate' : (sug > 0 && Math.abs(r - sug) > 1e-6 ? '<span style="color:var(--warn)">· manual override</span>' : '· manual');
+    if (!(sar > 0 && r > 0 && mkt > 0 && est > 0)) { el.innerHTML = '<span class="muted">Enter SAR amount and rates to preview</span>'; return; }
+    const pay = R2(sar * r), kept = R2(sar * (mkt - r)), y = R2(sar * est), net = R2(y - pay - fee);
+    const warn = r > mkt * 1.05 || r < mkt * 0.9;
+    el.innerHTML = `<div class="small muted" style="margin-bottom:6px">Slab <b style="color:var(--text)">${sl ? slabLabel(sl) : '—'}</b> · market − ${sl ? sl.discount.toFixed(2) : '0'} = <b style="color:var(--text)">${rate(sug)}</b></div>
+      <dl class="kv"><dt>INR payout to recipient</dt><dd><b>${money(pay, 'INR')}</b></dd>
+      <dt>Below market by ${rate(R6(mkt - r))}/SAR</dt><dd>${money(kept, 'INR')}</dd>
+      <dt>Est. Dubai yield @ ${rate(est)}</dt><dd>${money(y, 'INR')}</dd>
+      <dt>Est. net profit (fee ${money(fee, 'INR')})</dt><dd class="${net >= 0 ? 'pos' : 'neg'}"><b>${money(net, 'INR')}</b></dd></dl>
+      ${warn ? '<div class="small neg" style="margin-top:6px">Deal rate is far from market — check for a typo</div>' : ''}${net < 0 ? '<div class="small neg" style="margin-top:6px">This deal loses money at the expected Dubai rate</div>' : ''}`;
+  },
+  convert(f) {
+    const sar = num(f.sar.value), r = num(f.rate.value), el = document.getElementById('pv-convert');
+    el.innerHTML = sar > 0 && r > 0 ? `<dl class="kv"><dt>${money(sar, 'SAR')} × ${rate(r)}</dt><dd><b>${money(R2(sar * r), 'AED')}</b></dd></dl>` : '<span class="muted">Enter SAR and rate to preview AED</span>';
+  },
+  settle(f) {
+    const b = batch(f.dataset.id), aed = num(f.aed.value), r = num(f.rate.value), m = num(f.marketRate.value), el = document.getElementById('pv-settle');
+    if (!(aed > 0 && r > 0)) { el.innerHTML = '<span class="muted">Enter AED and net rate to preview</span>'; return; }
+    const inr = R2(aed * r);
+    const completes = b.status === 'converted_aed' && aed >= (b.aedAmount - (b.aedSettled || 0)) - 0.004;
+    let extra = '';
+    if (completes) {
+      const y = R2((b.inrYield || 0) + inr), ds = b.dealIds.map(deal), pay = ds.reduce((s, d) => s + d.inrPayout, 0), fee = ds.reduce((s, d) => s + dealCalc(d).fee, 0);
+      extra = `<dt>Batch INR total</dt><dd>${money(y, 'INR')}</dd><dt>Effective SAR → INR</dt><dd>${rate(y / b.sarTotal)}</dd><dt>Batch net profit</dt><dd class="${y - pay - fee >= 0 ? 'pos' : 'neg'}"><b>${money(y - pay - fee, 'INR')}</b></dd>`;
+    }
+    el.innerHTML = `<dl class="kv"><dt>INR for this part</dt><dd><b>${money(inr, 'INR')}</b></dd>${m > 0 ? `<dt>Dubai agent margin (this part)</dt><dd>${money(aed * (m - r), 'INR')}</dd>` : ''}${extra}</dl>${completes ? '<div class="small" style="margin-top:6px;color:var(--warn)">This part completes the batch and locks all its rates.</div>' : ''}`;
+  },
+  batch(f) {
+    const ids = [...f.querySelectorAll('input[name=dealIds]:checked')].map(i => i.value);
+    document.getElementById('pv-batch').innerHTML = `${ids.length} deals · <b>${money(ids.reduce((s, id) => s + deal(id).sarAmount, 0), 'SAR')}</b>`;
+  },
+};
+
+/* ============================ events ============================ */
+const ACT = {
+  closeModal,
+  reverseTranche(el) { ask('Reverse this part', 'The part stays in the record, crossed out, with reversing ledger entries.', {reason: true, danger: true, ok: 'Reverse part'}, reason => run(() => A.reverseTranche(el.dataset.id, el.dataset.kind, el.dataset.tid, reason), 'Part reversed')); },
+  useSlab() { const f = document.getElementById('dealForm'); f.dealRate.dataset.auto = '1'; LIVE.deal(f); },
+  rates() {
+    const st = S.settings;
+    openModal("Update today's rates", `<form data-form="rates" id="ratesForm"><div class="fg">
+      <label class="f full">Market rate (SAR → INR)<input name="marketSarInrRate" type="number" step="any" value="${st.marketSarInrRate}" required><span class="muted" style="font-weight:400">New deals start from this. Slab rates follow it automatically.</span></label>
+      <label class="f">Expected Dubai yield (SAR → INR)<input name="referenceSarInrRate" type="number" step="any" value="${st.referenceSarInrRate}" required></label>
+      <label class="f">AED → INR reference<input name="referenceAedInrRate" type="number" step="any" value="${st.referenceAedInrRate}" required></label>
+      <label class="f full">Note<input name="note" placeholder="optional, e.g. 2pm update"></label>
+      <div class="full small muted">Saved deals and batches keep the rates they were made with. This only changes the starting values for new deals and how unsettled SAR/AED is valued.</div>
+    </div></form>`, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="ratesForm">Save rates</button>`);
+  },
+  addSlab() { const sl = S.settings.slabs; sl.push({minSar: (Math.max(...sl.map(x => x.minSar)) || 0) + 50000, discount: 0}); save(); render(); },
+  delSlab(el) { S.settings.slabs.splice(+el.dataset.i, 1); save(); render(); },
+  capital(el) {
+    const k = el.dataset.kind;
+    const T = {add: 'Add capital', withdraw: 'Withdraw capital', transfer: 'Move operator funds'};
+    const all = HOLDER_ORDER.flatMap(t => partiesOf(t)).map(p => ({id: p.id, name: p.name + ' · ' + PT1[p.type]}));
+    const op = partiesOf('operator')[0]?.id;
+    openModal(T[k], `<form data-form="capital" id="capForm"><input type="hidden" name="kind" value="${k}"><div class="fg">
+      <label class="f">Amount<input name="amount" type="number" step="any" min="0" required></label>
+      <label class="f">Currency<select name="currency"><option>INR</option><option>SAR</option><option>AED</option></select></label>
+      <label class="f ${k === 'transfer' ? '' : 'full'}">${k === 'add' ? 'Held by' : 'From'}<select name="partyId">${opts(all, op)}</select></label>
+      ${k === 'transfer' ? `<label class="f">To<select name="toPartyId">${opts(all.filter(p => p.id !== op), '', 'Choose party')}</select></label>` : ''}
+      <label class="f">Date<input type="date" name="date" value="${todayStr()}"></label>
+      <label class="f">Note<input name="note" placeholder="${k === 'transfer' ? 'e.g. float advance' : 'optional'}"></label>
+      <div class="full small muted">${k === 'add' ? 'Your own money entering the business. Raises capital invested.' : k === 'withdraw' ? 'Money you take out of the business. Lowers capital invested.' : 'Moves your money to a party (e.g. an advance to a distributor). Capital is unchanged; it now shows as a debtor.'}</div>
+    </div></form>`, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="capForm">Save</button>`);
+  },
+  resetDemo() { ask('Reset sample data', 'Replace everything entered in this browser with the original sample data?', {danger: true, ok: 'Reset'}, () => { seed(); save(); closeModal(); location.hash = '#/dashboard'; render(); toast('Sample data restored'); }); },
+  newDeal() { openModal('New deal', dealForm(), `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="dealForm">Save deal</button>`); },
+  reverseDeal(el) {
+    const d = deal(el.dataset.id);
+    openModal('Reverse & re-enter ' + d.dealNo, dealForm({...d, replacesDealId: d.id}), `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="dealForm">Reverse &amp; save corrected deal</button>`);
+  },
+  cancelDeal(el) { ask('Cancel deal', 'The SAR is reversed out of the Saudi agent ledger. This cannot be undone.', {reason: true, danger: true, ok: 'Cancel deal'}, reason => run(() => A.cancelDeal(el.dataset.id, reason), 'Deal cancelled · reversal posted')); },
+  assignDist(el) {
+    const d = deal(el.dataset.id);
+    const dl = partiesOf('distributor').sort((a, b) => (b.regionId === d.regionId) - (a.regionId === d.regionId));
+    openModal('Assign ' + d.dealNo + ' to distributor', `<form data-form="assign" id="assignForm" data-id="${d.id}"><div class="fg">
+      <label class="f full">Distributor <span class="muted">(${esc(rname(d.regionId))} first)</span><select name="distributorId">${dl.map(p => `<option value="${p.id}" ${p.id === (d.distributorId || dl[0]?.id) ? 'selected' : ''}>${esc(p.name)} · ${esc(rname(p.regionId))}</option>`).join('')}</select></label>
+      <label class="f">Delivery fee (INR)<input name="fee" type="number" step="any" min="0" value="${d.status === 'assigned' ? d.distributorFeeInr : S.settings.defaultDistributorFeeInr}"></label>
+      <div class="preview"><dl class="kv"><dt>Pay recipient</dt><dd><b>${money(d.inrPayout, 'INR')}</b></dd></dl><div class="small muted">${esc(d.recipientName)} · ${esc(d.recipientAddress)}</div></div></div></form>`,
+      `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="assignForm">Assign</button>`);
+  },
+  advanceDeal(el) { run(() => A.advanceDeal(el.dataset.id), 'Status updated'); },
+  newBatch() {
+    const unb = S.deals.filter(d => !d.batchId && d.status !== 'cancelled');
+    openModal('New transit batch', `<form data-form="batch" data-live="batch" id="batchForm"><div class="fg">
+      <label class="f">Saudi collector<select name="saudiCollectorId">${opts(partiesOf('saudi_collector'), partiesOf('saudi_collector')[0]?.id)}</select></label>
+      <label class="f">Batch date<input type="date" name="createdOn" value="${todayStr()}"></label>
+      <div class="full"><div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="small muted"><b>Deals not yet batched</b></span><span class="small" id="pv-batch"></span></div>
+      <div class="checklist">${unb.map(d => `<label><input type="checkbox" name="dealIds" value="${d.id}" checked><span style="flex:1">${d.dealNo} · ${esc(d.recipientName)}<div class="small muted">${esc(pname(d.saudiAgentId))} · ${fdate(d.dealDate)}</div></span><span class="num">${money(d.sarAmount, 'SAR')}</span></label>`).join('') || '<div class="empty">All deals are already batched</div>'}</div></div>
+    </div></form>`, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="batchForm" ${unb.length ? '' : 'disabled'}>Create batch</button>`);
+  },
+  reverseBatch(el) { ask('Reverse batch', 'Its deals will be released so they can go into a new batch.', {reason: true, danger: true, ok: 'Reverse batch'}, reason => run(() => A.reverseBatch(el.dataset.id, reason), 'Batch reversed')); },
+  addAlloc(el) {
+    const b = batch(el.dataset.id);
+    const left = R2(b.inrYield - S.allocations.filter(a => a.batchId === b.id).reduce((s, a) => s + a.inrAmount, 0));
+    openModal('Dubai agent → distributor payment', `<form data-form="alloc" id="allocForm" data-id="${b.id}"><div class="fg">
+      <label class="f">Distributor<select name="distributorId">${partiesOf('distributor').map(p => `<option value="${p.id}">${esc(p.name)} · ${esc(rname(p.regionId))}</option>`).join('')}</select></label>
+      <label class="f">INR amount <span class="muted">(max ${money(left, 'INR')})</span><input name="inrAmount" type="number" step="any" min="0" max="${left}" required></label>
+      <label class="f">Date<input type="date" name="date" value="${todayStr()}"></label>
+      <label class="f">Note<input name="note" placeholder="optional"></label></div></form>`,
+      `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="allocForm">Record payment</button>`);
+  },
+  editParty(el) {
+    const p = el.dataset.id ? party(el.dataset.id) : {type: el.dataset.type, name: '', phone: '', notes: '', active: true};
+    openModal((el.dataset.id ? 'Edit ' : 'Add ') + PT1[p.type], `<form data-form="party" id="partyForm"><input type="hidden" name="id" value="${p.id || ''}"><input type="hidden" name="type" value="${p.type}"><div class="fg">
+      <label class="f">Name<input name="name" value="${esc(p.name)}" required></label>
+      <label class="f">Phone<input name="phone" value="${esc(p.phone)}"></label>
+      ${p.type === 'distributor' ? `<label class="f">Region<select name="regionId">${opts(S.regions, p.regionId, 'Choose region')}</select></label>` : ''}
+      <label class="f full">Notes<textarea name="notes">${esc(p.notes || '')}</textarea></label>
+      ${p.id ? `<label class="row small"><input type="checkbox" name="active" ${p.active ? 'checked' : ''} style="width:auto"> Active</label>` : ''}</div></form>`,
+      `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="partyForm">Save</button>`);
+  },
+  partyTab(el, e) { e.preventDefault(); UI.partyTab = el.dataset.tab; if (location.hash !== '#/parties') location.hash = '#/parties'; else render(); },
+  clearDealFilters() { UI.deals = {q: '', status: '', agent: '', region: '', dist: '', from: '', to: ''}; render(); },
+  exportCsv() {
+    const r = UI.report;
+    const ds = S.deals.filter(d => (!r.from || d.dealDate >= r.from) && (!r.to || d.dealDate <= r.to));
+    const head = ['Deal', 'Date', 'Saudi agent', 'Recipient', 'Region', 'SAR', 'Market rate', 'Slab', 'Override', 'Deal rate', 'INR payout', 'Effective rate', 'INR Dubai yield', 'Fee', 'Net profit', 'Profit basis', 'Batch', 'Distributor', 'Status'];
+    const rows = ds.map(d => { const c = dealCalc(d); return [d.dealNo, d.dealDate, pname(d.saudiAgentId), d.recipientName, rname(d.regionId), d.sarAmount, d.marketRate, d.slab?.label || '', d.rateOverride ? 'yes' : '', d.dealRate, d.inrPayout, c.effRate, c.yieldInr, c.fee, d.status === 'cancelled' ? '' : c.net, c.settled ? 'actual' : 'estimated', d.batchId ? batch(d.batchId).batchNo : '', d.distributorId ? pname(d.distributorId) : '', DS[d.status][0]]; });
+    const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const filename = `deals_${r.from || 'all'}_${r.to || 'all'}.csv`;
+    (async () => {
+      // On claude.ai the viewer saves through the downloads capability; opened as a local file, fall back to a normal download.
+      const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
+      if (dl) {
+        try { await dl.save({filename, data: csv}); toast('CSV saved'); }
+        catch (e) { if (e?.code === 'rate_limited') toast('A save prompt is already open', true); else if (e?.code !== 'declined') toast('Downloads are not available in this view', true); }
+        return;
+      }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'})); a.download = filename; a.click();
+    })();
+  },
+};
+const FORMS = {
+  deal(v) { run(() => { if (v.replacesDealId) { A.cancelDeal(v.replacesDealId, 'Reversed for correction'); } const d = A.addDeal(v); location.hash = '#/deal/' + d.id; }, v.replacesDealId ? 'Original reversed · corrected deal saved' : 'Deal saved'); },
+  assign(v, f) { run(() => A.assignDistributor(f.dataset.id, v.distributorId, v.fee), 'Distributor assigned'); },
+  batch(v, f) { run(() => { const b = A.createBatch({...v, dealIds: [...f.querySelectorAll('input[name=dealIds]:checked')].map(i => i.value)}); location.hash = '#/batch/' + b.id; }, 'Batch created'); },
+  transit(v, f) { run(() => A.batchTransit(f.dataset.id, v.dubaiCollectorId), 'Marked in transit'); },
+  convert(v, f) { run(() => A.batchConvert(f.dataset.id, v), 'Conversion part recorded'); },
+  settle(v, f) {
+    const b = batch(f.dataset.id), completes = b.status === 'converted_aed' && num(v.aed) >= (b.aedAmount - (b.aedSettled || 0)) - 0.004;
+    const go = () => run(() => A.batchSettle(f.dataset.id, v), completes ? 'Batch fully settled · rates locked' : 'Settlement part recorded');
+    if (completes) ask('Complete & lock batch', 'This part completes the batch. All its rates and per-deal profit become permanent.', {ok: 'Settle & lock'}, go); else go();
+  },
+  alloc(v, f) { run(() => A.addAllocation({...v, batchId: f.dataset.id}), 'Payment recorded'); },
+  party(v) { run(() => A.saveParty({...v, active: v.id ? v.active === 'on' : true}), 'Saved'); },
+  settings(v) { run(() => A.saveSettings(v), 'Settings saved'); },
+  rates(v) { run(() => A.setRates(v), "Today's rates updated"); },
+  slabs(v, f) { run(() => A.saveSlabs([...f.querySelectorAll('[data-slab]')].map(r => ({minSar: num(r.querySelector('[name=minSar]').value), discount: num(r.querySelector('[name=discount]').value)}))), 'Rate slabs saved'); },
+  capital(v) { run(() => A.capitalEntry(v), 'Capital entry saved'); },
+  region(v) { run(() => A.addRegion(v.name || ''), 'Region added'); },
+  ask(v) { const cb = ASK_CB; ASK_CB = null; if (cb) cb((v.reason || '').trim()); },
+  globalSearch(v) { UI.deals = {q: (v.q || '').trim(), status: '', agent: '', region: '', dist: '', from: '', to: ''}; document.getElementById('gsearch').value = ''; if (location.hash !== '#/deals') location.hash = '#/deals'; else render(); },
+};
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) && !modal.open) { e.preventDefault(); document.getElementById('gsearch').focus(); }
+});
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+  const fn = ACT[el.dataset.act]; if (fn) fn(el, e);
+});
+document.addEventListener('submit', e => {
+  const f = e.target.closest('form[data-form]'); if (!f) return;
+  e.preventDefault(); FORMS[f.dataset.form]?.(Object.fromEntries(new FormData(f)), f);
+});
+document.addEventListener('mousemove', e => {
+  const tip = document.getElementById('tip'); if (!tip) return;
+  const h = e.target.closest?.('[data-ci]');
+  if (!h || !CHART) { tip.classList.remove('show'); return; }
+  const i = +h.dataset.ci, box = document.getElementById('chart').getBoundingClientRect();
+  tip.innerHTML = `<div class="tt">${fdate(CHART.labels[i])}</div><div class="tr"><i class="sw" style="background:var(--accent)"></i><span>${CHART.n1}</span><span>${money(CHART.s1[i], 'INR')}</span></div><div class="tr"><i class="sw" style="background:var(--accent-2)"></i><span>${CHART.n2}</span><span>${money(CHART.s2[i], 'INR')}</span></div>`;
+  let x = e.clientX - box.left + 14; if (x + 190 > box.width) x = e.clientX - box.left - 200;
+  tip.style.left = x + 'px'; tip.style.top = Math.max(0, e.clientY - box.top - 40) + 'px'; tip.classList.add('show');
+});
+document.addEventListener('input', e => { const f = e.target.closest('form[data-live]'); if (f) LIVE[f.dataset.live]?.(f, e.target); });
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-filter]'); if (!el) return;
+  const [grp, k] = el.dataset.filter.split('.'); UI[grp][k] = el.value; render();
+});
+document.addEventListener('keyup', e => {
+  if (e.target.id === 'f-q') { clearTimeout(ACT._qt); ACT._qt = setTimeout(() => { UI.deals.q = e.target.value; render(); }, 250); }
+});
+
+/* ============================ router ============================ */
+function render() {
+  const [page, id] = (location.hash.replace(/^#\/?/, '') || 'dashboard').split('/');
+  const navKey = {deal: 'deals', batch: 'batches', party: 'parties'}[page] || page;
+  const cnt = navCounts();
+  document.getElementById('nav').innerHTML = NAV_SECTIONS.map(([sec, items]) => `<div class="navsec">${sec}</div>` + items.map(([k, l]) =>
+    `<a href="#/${k}" class="${k === navKey ? 'on' : ''}">${icon(k)}<span>${l}</span>${cnt[k] ? `<span class="cnt" title="Needs action">${cnt[k]}</span>` : ''}</a>`).join('')).join('');
+  document.getElementById('ptitle').textContent = TITLES[page] || '';
+  document.getElementById('pactions').innerHTML = `<button class="btn" data-act="rates" title="Update today's rates">Market <b style="font-variant-numeric:tabular-nums">${rate(S.settings.marketSarInrRate)}</b> <span class="muted small">${S.settings.rateLog.length ? fdt(S.settings.rateLog.at(-1).at) : ''}</span></button><button class="btn" data-act="newBatch">${icon('batches')}New batch</button><button class="btn pri" data-act="newDeal">${icon('plus')}New deal</button>`;
+  const P = {dashboard: pageDashboard, deals: pageDeals, deal: () => pageDeal(id), batches: pageBatches, batch: () => pageBatch(id),
+    parties: pageParties, party: () => pageParty(id), capital: pageCapital, balances: pageBalances, reports: pageReports, settings: pageSettings}[page] || notFound;
+  const ae = document.activeElement, focusId = ae?.id, sel = focusId && ae.selectionStart;
+  document.getElementById('view').innerHTML = P();
+  if (focusId) { const n = document.getElementById(focusId); if (n) { n.focus(); try { n.setSelectionRange(sel, sel); } catch (e) {} } }
+}
+window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+S = load() || seed();
+S.capital ??= []; S.counters.capital ??= 0; S.settings = {...defaultSettings(), ...S.settings};
+if (!S.parties.some(p => p.type === 'operator')) S.parties.push({id: uid(), type: 'operator', name: 'Operator – Own Cash', phone: '', active: true});
+save();
+render();
+</script>
+</body>
+</html>
