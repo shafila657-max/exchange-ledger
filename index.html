@@ -367,8 +367,8 @@ const fdt = s => s ? new Date(s).toLocaleString('en-GB', {day: '2-digit', month:
 const num = v => { const n = parseFloat(v); return isNaN(n) ? NaN : n; };
 
 /* ============================ labels ============================ */
-const PT = {saudi_agent: 'Saudi Agents', saudi_collector: 'Saudi Collectors', dubai_collector: 'Dubai Collectors', dubai_agent: 'Dubai Agents', distributor: 'Indian Distributors', operator: 'Operator Cash'};
-const PT1 = {saudi_agent: 'Saudi Agent', saudi_collector: 'Saudi Collector', dubai_collector: 'Dubai Collector', dubai_agent: 'Dubai Agent', distributor: 'Indian Distributor', operator: 'Operator Cash Account'};
+const PT = {saudi_agent: 'Saudi Customers', saudi_collector: 'Saudi Collectors', dubai_collector: 'Dubai Collectors', dubai_agent: 'Dubai Agents', distributor: 'Indian Distributors', operator: 'Operator Cash'};
+const PT1 = {saudi_agent: 'Saudi Customer', saudi_collector: 'Saudi Collector', dubai_collector: 'Dubai Collector', dubai_agent: 'Dubai Agent', distributor: 'Indian Distributor', operator: 'Operator Cash Account'};
 const DS = {pending_allocation: ['Pending Allocation', ''], assigned: ['Assigned to Distributor', 'b-blue'], out_for_delivery: ['Out for Delivery', 'b-amber'], completed: ['Completed', 'b-green'], cancelled: ['Cancelled', 'b-red']};
 const DS_FLOW = ['pending_allocation', 'assigned', 'out_for_delivery', 'completed'];
 const BS = {collected_saudi: ['Collected in Saudi', ''], in_transit: ['In Transit to Dubai', 'b-amber'], converted_aed: ['Converted to AED', 'b-blue'], settled: ['Settled with Dubai Agent', 'b-green']};
@@ -380,7 +380,7 @@ const LOCK = '<span class="lock" title="Locked for audit">🔒 locked</span>';
 /* ============================ state ============================ */
 const KEY = 'xledger-prototype-v3';
 let S;
-// Premium pricing, per ₹1,000 delivered: the Dubai agent quotes AED per ₹1,000; the customer (Saudi agent)
+// Premium pricing, per ₹1,000 delivered: the Dubai agent quotes AED per ₹1,000; the customer (Saudi customer)
 // is charged SAR per ₹1,000 = Dubai quote + premium. Bigger deals get a smaller premium.
 const DEFAULT_SLABS = [{minInr: 0, premium: 2.00}, {minInr: 500000, premium: 1.80}, {minInr: 2000000, premium: 1.50}];
 function defaultSettings() {
@@ -471,7 +471,7 @@ const A = {
     if (p > q * 1.3 || p < q * 0.9) fail('Customer rate ' + p + ' is far from the Dubai quote ' + q + ' — check for a typo');
     const sl = slabFor(inr), sug = R4(q + (sl?.premium ?? 0)), sar = R2(inr / 1000 * p);
     const r = 1000 / p, est = 1000 * c / q, override = Math.abs(R4(p) - sug) > 1e-6;
-    if (!f.saudiAgentId) fail('Choose a Saudi agent');
+    if (!f.saudiAgentId) fail('Choose a Saudi customer');
     if (!f.recipientName?.trim()) fail('Recipient name is required');
     if (!f.regionId) fail('Choose a delivery region');
     const dist = f.distributorId ? party(f.distributorId) : null;
@@ -686,7 +686,7 @@ function balances(E) {
   for (const e of E) { m[e.partyId] ??= {SAR: 0, AED: 0, INR: 0}; m[e.partyId][e.cur] = R2(m[e.partyId][e.cur] + e.amt); }
   return m;
 }
-const BAL_LABEL = {saudi_agent: ['SAR', 'SAR due from agent'], saudi_collector: ['SAR', 'SAR in custody'], dubai_collector: ['SAR/AED', 'In custody'], dubai_agent: ['INR', 'INR due to India'], distributor: ['INR', 'Cash held'], operator: ['INR', 'Cash held']};
+const BAL_LABEL = {saudi_agent: ['SAR', 'SAR due from customer'], saudi_collector: ['SAR', 'SAR in custody'], dubai_collector: ['SAR/AED', 'In custody'], dubai_agent: ['INR', 'INR due to India'], distributor: ['INR', 'Cash held'], operator: ['INR', 'Cash held']};
 
 /* ============================ seed ============================ */
 function seed() {
@@ -939,7 +939,7 @@ function dealTable(list, showFoot) {
     const l = list.filter(d => d.status !== 'cancelled');
     foot = `<tfoot><tr><td colspan="3">${l.length} active deals</td><td class="num">${money(l.reduce((s, d) => s + d.inrPayout, 0), 'INR')}</td><td></td><td class="num">${money(l.reduce((s, d) => s + d.sarAmount, 0), 'SAR')}</td><td class="num">${money(l.reduce((s, d) => s + profitSar(dealCalc(d)), 0), 'SAR')}<div class="small muted">≈ ${money(l.reduce((s, d) => s + dealCalc(d).net, 0), 'INR')}</div></td><td colspan="3"></td></tr></tfoot>`;
   }
-  return `<div class="tw"><table class="wide deals"><thead><tr><th>Deal</th><th>Saudi agent</th><th>Recipient</th><th class="num">INR to deliver</th><th class="num">Rate /₹1000</th><th class="num">SAR to collect</th><th class="num">Profit</th><th>Batch</th><th>Distributor</th><th>Status</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div>`;
+  return `<div class="tw"><table class="wide deals"><thead><tr><th>Deal</th><th>Saudi customer</th><th>Recipient</th><th class="num">INR to deliver</th><th class="num">Rate /₹1000</th><th class="num">SAR to collect</th><th class="num">Profit</th><th>Batch</th><th>Distributor</th><th>Status</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div>`;
 }
 
 function pageDeals() {
@@ -951,13 +951,13 @@ function pageDeals() {
     (!f.dist || d.distributorId === f.dist) && (!f.from || d.dealDate >= f.from) && (!f.to || d.dealDate <= f.to)
   ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return `
-  <div class="head"><div><h1>Deals</h1><div class="muted small">Each deal records SAR collected by a Saudi agent and the INR promised to a recipient in India</div></div>
+  <div class="head"><div><h1>Deals</h1><div class="muted small">Each deal records SAR collected by a Saudi customer and the INR promised to a recipient in India</div></div>
   </div>
   <div class="card">
     <div class="filters">
       <input id="f-q" data-filter="deals.q" placeholder="Search deal no, recipient, phone, address" value="${esc(f.q)}" style="flex:2 1 220px">
       <select data-filter="deals.status"><option value="">All statuses</option>${Object.keys(DS).map(k => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${DS[k][0]}</option>`).join('')}</select>
-      <select data-filter="deals.agent">${opts(partiesOf('saudi_agent', true), f.agent, 'All Saudi agents')}</select>
+      <select data-filter="deals.agent">${opts(partiesOf('saudi_agent', true), f.agent, 'All Saudi customers')}</select>
       <select data-filter="deals.region">${opts(S.regions, f.region, 'All regions')}</select>
       <select data-filter="deals.dist">${opts(partiesOf('distributor', true), f.dist, 'All distributors')}</select>
       <input type="date" data-filter="deals.from" value="${f.from}" title="From date">
@@ -1007,7 +1007,7 @@ function pageDeal(id) {
       <dt>Name</dt><dd>${esc(d.recipientName)}</dd><dt>Phone</dt><dd>${esc(d.recipientPhone) || '—'}</dd>
       <dt>Address</dt><dd>${esc(d.recipientAddress) || '—'}</dd><dt>Region</dt><dd>${esc(rname(d.regionId))}</dd>
       <dt>Distributor</dt><dd>${d.distributorId ? partyLink(d.distributorId) : '—'}</dd><dt>Delivery fee</dt><dd>${money(d.distributorFeeInr, 'INR')}</dd>
-      <dt>Deal date</dt><dd>${fdate(d.dealDate)}</dd><dt>Saudi agent</dt><dd>${partyLink(d.saudiAgentId)}</dd>
+      <dt>Deal date</dt><dd>${fdate(d.dealDate)}</dd><dt>Saudi customer</dt><dd>${partyLink(d.saudiAgentId)}</dd>
       <dt>Batch</dt><dd>${b ? batchLink(b) + ' ' + bBadge(b) : '—'}</dd>
     </dl></div>
     <div class="card"><h2>History</h2>${d.history.slice().reverse().map(h => `<div class="hist"><div class="row"><span class="badge ${DS[h.status][1]}">${DS[h.status][0]}</span><span class="small muted">${fdt(h.at)}</span></div>${h.note ? `<div class="small" style="margin-top:2px">${esc(h.note)}</div>` : ''}</div>`).join('')}</div>
@@ -1157,7 +1157,7 @@ function pageReports() {
   const tot = rows.reduce((t, x) => { for (const k of ['n', 'sar', 'payout', 'yieldA', 'sarA', 'fees', 'real', 'est', 'mktInr']) t[k] += x[k]; return t; }, {n: 0, sar: 0, payout: 0, yieldA: 0, sarA: 0, fees: 0, real: 0, est: 0, mktInr: 0});
   const tr = (x, foot) => `<tr><td>${foot ? 'Total' : esc(x.k)}</td><td class="num">${x.n}</td><td class="num">${money(x.sar, 'SAR')}</td><td class="num">${rate(x.mktInr / x.sar)}</td><td class="num">${rate(x.payout / x.sar)}</td><td class="num">${x.sarA ? rate(x.yieldA / x.sarA) : '—'}</td><td class="num">${money(x.payout, 'INR')}</td><td class="num">${money(x.fees, 'INR')}</td><td class="num">${signed(x.real, 'INR')}</td><td class="num">${money(x.est, 'INR')}</td></tr>`;
   const bs = S.batches.filter(b => activeBatch(b) && b.status === 'settled' && (!r.from || b.createdOn >= r.from) && (!r.to || b.createdOn <= r.to));
-  const G = {agent: 'Saudi agent', region: 'Region', dist: 'Distributor', batch: 'Batch', status: 'Status', date: 'Deal date'};
+  const G = {agent: 'Saudi customer', region: 'Region', dist: 'Distributor', batch: 'Batch', status: 'Status', date: 'Deal date'};
   return `
   <div class="head"><div><h1>Reports</h1><div class="muted small">Operator profit and rate difference across deals and date ranges</div></div>
     <button class="btn" data-act="exportCsv">Export CSV</button></div>
@@ -1341,7 +1341,7 @@ function dealForm(pre = {}) {
   <div class="dl-main">
   ${sec(1, 'Deal', '', `
     <label class="f">Deal date<input name="dealDate" type="date" value="${pre.dealDate || todayStr()}" required></label>
-    <label class="f">Saudi agent<select name="saudiAgentId" required>${opts(partiesOf('saudi_agent'), pre.saudiAgentId, 'Choose')}</select></label>
+    <label class="f">Saudi customer<select name="saudiAgentId" required>${opts(partiesOf('saudi_agent'), pre.saudiAgentId, 'Choose')}</select></label>
     <label class="f full"><span>Amount to deliver in India (₹ in thousands) <b id="inrWords" style="color:var(--text)"></b></span><input name="inrK" type="number" step="any" min="0" inputmode="decimal" value="${pre.inrPayout != null ? R6(pre.inrPayout / 1000) : ''}" placeholder="e.g. 10 = ₹10,000" required></label>`)}
   ${sec(2, 'Rate', 'per ₹1,000', `
     <label class="f">Dubai quote (AED)<input name="dubaiQuote" type="number" step="any" min="0" inputmode="decimal" value="${q ?? ''}" required></label>
@@ -1449,7 +1449,7 @@ const ACT = {
     const d = deal(el.dataset.id);
     openModal('Reverse & re-enter ' + d.dealNo, dealForm({...d, replacesDealId: d.id}), `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="dealForm">Reverse &amp; save corrected deal</button>`, 'wide');
   },
-  cancelDeal(el) { ask('Cancel deal', 'The SAR is reversed out of the Saudi agent ledger. This cannot be undone.', {reason: true, danger: true, ok: 'Cancel deal'}, reason => run(() => A.cancelDeal(el.dataset.id, reason), 'Deal cancelled · reversal posted')); },
+  cancelDeal(el) { ask('Cancel deal', 'The SAR is reversed out of the Saudi customer ledger. This cannot be undone.', {reason: true, danger: true, ok: 'Cancel deal'}, reason => run(() => A.cancelDeal(el.dataset.id, reason), 'Deal cancelled · reversal posted')); },
   assignDist(el) {
     const d = deal(el.dataset.id);
     const dl = partiesOf('distributor').sort((a, b) => (b.regionId === d.regionId) - (a.regionId === d.regionId));
@@ -1495,7 +1495,7 @@ const ACT = {
   exportCsv() {
     const r = UI.report;
     const ds = S.deals.filter(d => (!r.from || d.dealDate >= r.from) && (!r.to || d.dealDate <= r.to));
-    const head = ['Deal', 'Date', 'Saudi agent', 'Recipient', 'Region', 'SAR', 'Dubai quote (AED/₹1000)', 'Slab', 'Override', 'Premium', 'Customer rate (SAR/₹1000)', 'INR payout', 'Effective rate', 'INR Dubai yield', 'Fee', 'Net profit INR', 'Net profit SAR', 'Profit basis', 'Batch', 'Distributor', 'Status'];
+    const head = ['Deal', 'Date', 'Saudi customer', 'Recipient', 'Region', 'SAR', 'Dubai quote (AED/₹1000)', 'Slab', 'Override', 'Premium', 'Customer rate (SAR/₹1000)', 'INR payout', 'Effective rate', 'INR Dubai yield', 'Fee', 'Net profit INR', 'Net profit SAR', 'Profit basis', 'Batch', 'Distributor', 'Status'];
     const rows = ds.map(d => { const c = dealCalc(d); return [d.dealNo, d.dealDate, pname(d.saudiAgentId), d.recipientName, rname(d.regionId), d.sarAmount, d.dubaiQuote, d.slab?.label || '', d.rateOverride ? 'yes' : '', d.premium, d.custRate, d.inrPayout, c.effRate, c.yieldInr, c.fee, d.status === 'cancelled' ? '' : c.net, d.status === 'cancelled' ? '' : profitSar(c), c.settled ? 'actual' : 'estimated', d.batchId ? batch(d.batchId).batchNo : '', d.distributorId ? pname(d.distributorId) : '', DS[d.status][0]]; });
     const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const filename = `deals_${r.from || 'all'}_${r.to || 'all'}.csv`;
