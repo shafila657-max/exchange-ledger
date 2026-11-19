@@ -174,6 +174,19 @@ dialog::backdrop{background:rgba(17,17,20,.4);backdrop-filter:blur(2px)}
 .mh h2{margin:0}
 .mb{padding:18px 22px;overflow:auto}
 .mf{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border)}
+dialog[open]{display:flex;flex-direction:column}
+.mb{flex:1;min-height:0}
+dialog.wide{width:min(940px,calc(100vw - 32px))}
+.dealf{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
+.dealf>.alert{grid-column:1/-1;margin:0}
+.dl-side{position:sticky;top:0}
+.dl-side .preview{padding:14px 16px}
+.dl-side .kv dt{font-size:12.5px}
+.fsec+.fsec{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.fsec h3{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;font-weight:650}
+.fsec h3 .n{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700}
+.fsec h3 .muted{font-weight:500;font-size:12px}
+@media (max-width:860px){.dealf{grid-template-columns:1fr;gap:16px}.dl-side{position:static}}
 .x{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
 .checklist{max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:12px}
 .checklist label{display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer}
@@ -264,6 +277,8 @@ dialog::backdrop{background:rgba(17,17,20,.4);backdrop-filter:blur(2px)}
   .mf .btn{flex:1;justify-content:center;padding:12px}
   .fg{grid-template-columns:1fr;gap:12px}
   .preview{grid-row:auto!important}
+  .dealf .fg{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px}
+  .fsec+.fsec{margin-top:14px;padding-top:14px}
   /* tables become stacked cards */
   .tw{overflow:visible}
   .tw table,.tw tbody,.tw tfoot{display:block}
@@ -459,6 +474,11 @@ const A = {
     if (!f.saudiAgentId) fail('Choose a Saudi agent');
     if (!f.recipientName?.trim()) fail('Recipient name is required');
     if (!f.regionId) fail('Choose a delivery region');
+    const dist = f.distributorId ? party(f.distributorId) : null;
+    if (f.distributorId && (!dist || dist.type !== 'distributor')) fail('Choose a distributor');
+    if (dist && dist.regionId !== f.regionId) fail(dist.name + ' does not deliver in ' + rname(f.regionId));
+    const fee = f.fee == null || f.fee === '' ? S.settings.defaultDistributorFeeInr : num(f.fee);
+    if (dist && (isNaN(fee) || fee < 0)) fail('Delivery fee must be 0 or more');
     const n = ++S.counters.deal;
     const d = {id: uid(), dealNo: 'D-' + String(n).padStart(4, '0'), dealDate: f.dealDate || at.slice(0, 10),
       saudiAgentId: f.saudiAgentId, sarAmount: R2(sar), dealRate: R6(r),
@@ -469,7 +489,9 @@ const A = {
       recipientName: f.recipientName.trim(), recipientPhone: f.recipientPhone || '', recipientAddress: f.recipientAddress || '',
       regionId: f.regionId, distributorFeeInr: 0, status: 'pending_allocation',
       history: [{status: 'pending_allocation', at, note: `Deal logged @ SAR ${rate(p)} per ₹1,000 (Dubai ${rate(q)} AED + premium ${rate(R4(p - q))}${override ? ', slab rate ' + rate(sug) + ' overridden' : ', slab ' + (sl ? slabLabel(sl) : '—')})`}], replacesDealId: f.replacesDealId || undefined, createdAt: at};
-    S.deals.push(d); return d;
+    S.deals.push(d);
+    if (dist) A.assignDistributor(d.id, dist.id, fee, at);
+    return d;
   },
   cancelDeal(id, reason, at = nowISO()) {
     const d = deal(id);
@@ -746,7 +768,8 @@ function run(fn, okMsg) {
   catch (e) { if (e instanceof UserError) toast(e.message, true); else { console.error(e); toast('Unexpected error: ' + e.message, true); } }
 }
 const modal = document.getElementById('modal');
-function openModal(title, body, footer) {
+function openModal(title, body, footer, cls = '') {
+  modal.className = cls;
   modal.innerHTML = `<div class="mh"><h2>${title}</h2><button class="x" data-act="closeModal" aria-label="Close">×</button></div><div class="mb">${body}</div>${footer ? `<div class="mf">${footer}</div>` : ''}`;
   modal.showModal(); labelTables(modal);
   const f = modal.querySelector('form[data-live]'); if (f) LIVE[f.dataset.live]?.(f);
@@ -1300,32 +1323,50 @@ function pageBalances() {
 }
 
 /* ============================ modals ============================ */
+// distributors who deliver in a region; a single match is picked automatically
+function distOpts(regionId, sel) {
+  if (!regionId) return '<option value="">Pick region</option>';
+  const l = partiesOf('distributor').filter(p => p.regionId === regionId);
+  if (!l.length) return '<option value="">None in region</option>';
+  const pick = l.some(p => p.id === sel) ? sel : l.length === 1 ? l[0].id : '';
+  return (l.length > 1 ? '<option value="">Choose</option>' : '') + l.map(p => `<option value="${p.id}" ${p.id === pick ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+}
 function dealForm(pre = {}) {
   const st = S.settings, isRe = !!pre.replacesDealId;
   const q = isRe ? pre.dubaiQuote : st.dubaiQuote, c = isRe ? pre.sarAedRate : st.sarAedRate;
-  return `<form data-form="deal" data-live="deal" id="dealForm"><input type="hidden" name="replacesDealId" value="${pre.replacesDealId || ''}">
+  const fee = pre.distributorId ? pre.distributorFeeInr : st.defaultDistributorFeeInr;
+  const sec = (n, t, sub, body) => `<section class="fsec"><h3><span class="n">${n}</span>${t}${sub ? ` <span class="muted">${sub}</span>` : ''}</h3><div class="fg">${body}</div></section>`;
+  return `<form data-form="deal" data-live="deal" id="dealForm" class="dealf"><input type="hidden" name="replacesDealId" value="${pre.replacesDealId || ''}">
   ${isRe ? `<div class="alert">Correcting ${deal(pre.replacesDealId).dealNo}. The original will be cancelled with a reversal entry when you save.</div>` : ''}
-  <div class="fg">
+  <div class="dl-main">
+  ${sec(1, 'Deal', '', `
     <label class="f">Deal date<input name="dealDate" type="date" value="${pre.dealDate || todayStr()}" required></label>
-    <label class="f">Saudi agent<select name="saudiAgentId" required>${opts(partiesOf('saudi_agent'), pre.saudiAgentId, 'Choose agent')}</select></label>
-    <label class="f full">Amount to deliver in India (₹ in thousands) <span class="muted" id="inrWords"></span><input name="inrK" type="number" step="any" min="0" value="${pre.inrPayout != null ? R6(pre.inrPayout / 1000) : ''}" placeholder="e.g. 10 = ₹10,000" required></label>
-    <label class="f">Dubai quote (AED per ₹1,000)<input name="dubaiQuote" type="number" step="any" min="0" value="${q ?? ''}" required></label>
-    <label class="f">Customer rate (SAR per ₹1,000) <span class="muted" id="rateMode"></span>
-      <div class="row" style="flex-wrap:nowrap"><input name="custRate" type="number" step="any" min="0" value="${pre.custRate ?? ''}" data-auto="${isRe ? '0' : '1'}" required><button type="button" class="btn sm" data-act="useSlab" title="Reset to Dubai quote + slab premium">↺ Slab</button></div></label>
-    <label class="f">SAR → AED rate<input name="sarAedRate" type="number" step="any" min="0" value="${c ?? ''}" required></label>
-    <div class="preview" id="pv-deal" style="grid-row:span 2"></div>
+    <label class="f">Saudi agent<select name="saudiAgentId" required>${opts(partiesOf('saudi_agent'), pre.saudiAgentId, 'Choose')}</select></label>
+    <label class="f full"><span>Amount to deliver in India (₹ in thousands) <b id="inrWords" style="color:var(--text)"></b></span><input name="inrK" type="number" step="any" min="0" inputmode="decimal" value="${pre.inrPayout != null ? R6(pre.inrPayout / 1000) : ''}" placeholder="e.g. 10 = ₹10,000" required></label>`)}
+  ${sec(2, 'Rate', 'per ₹1,000', `
+    <label class="f">Dubai quote (AED)<input name="dubaiQuote" type="number" step="any" min="0" inputmode="decimal" value="${q ?? ''}" required></label>
+    <label class="f">SAR → AED<input name="sarAedRate" type="number" step="any" min="0" inputmode="decimal" value="${c ?? ''}" required></label>
+    <label class="f full"><span>Customer rate (SAR) <span id="rateMode"></span></span>
+      <div class="row" style="flex-wrap:nowrap"><input name="custRate" type="number" step="any" min="0" inputmode="decimal" value="${pre.custRate ?? ''}" data-auto="${isRe ? '0' : '1'}" required><button type="button" class="btn sm" data-act="useSlab" title="Reset to Dubai quote + slab premium">↺ Slab</button></div></label>`)}
+  ${sec(3, 'Recipient &amp; delivery', '', `
     <label class="f">Recipient name<input name="recipientName" value="${esc(pre.recipientName || '')}" required></label>
-    <label class="f">Recipient phone<input name="recipientPhone" value="${esc(pre.recipientPhone || '')}"></label>
-    <label class="f">Delivery region<select name="regionId" required>${opts(S.regions, pre.regionId, 'Choose region')}</select></label>
-    <label class="f full">Delivery address<textarea name="recipientAddress">${esc(pre.recipientAddress || '')}</textarea></label>
-  </div></form>`;
+    <label class="f">Recipient phone<input name="recipientPhone" type="tel" value="${esc(pre.recipientPhone || '')}"></label>
+    <label class="f">Delivery region<select name="regionId" required>${opts(S.regions, pre.regionId, 'Choose')}</select></label>
+    <label class="f">Distributor<select name="distributorId" required>${distOpts(pre.regionId, pre.distributorId)}</select></label>
+    <label class="f">Delivery fee (₹)<input name="fee" type="number" step="any" min="0" inputmode="decimal" value="${fee}" required></label>
+    <label class="f">Delivery address<input name="recipientAddress" value="${esc(pre.recipientAddress || '')}" placeholder="optional"></label>`)}
+  </div>
+  <aside class="dl-side"><div class="preview" id="pv-deal"></div></aside>
+  </form>`;
 }
 const LIVE = {
   deal(f, target) {
     const el = document.getElementById('pv-deal'); if (!el) return;
     const dr = f.custRate;
     if (target === dr) dr.dataset.auto = '0';
-    const inr = R2(num(f.inrK.value) * 1000), q = num(f.dubaiQuote.value), c = num(f.sarAedRate.value), fee = S.settings.defaultDistributorFeeInr;
+    if (target === f.regionId) f.distributorId.innerHTML = distOpts(f.regionId.value, f.distributorId.value);
+    const feeV = f.fee.value.trim(), fee = feeV === '' ? S.settings.defaultDistributorFeeInr : num(feeV);
+    const inr = R2(num(f.inrK.value) * 1000), q = num(f.dubaiQuote.value), c = num(f.sarAedRate.value);
     document.getElementById('inrWords').textContent = inr > 0 ? '= ' + money(inr, 'INR') : '';
     const sl = inr > 0 ? slabFor(inr) : null, sug = inr > 0 && q > 0 ? suggestCustRate(inr, q) : NaN;
     if (dr.dataset.auto === '1' && sug > 0) dr.value = sug;
@@ -1403,10 +1444,10 @@ const ACT = {
     const keep = {regions: S.regions, parties: S.parties, settings: S.settings};
     S = {...emptyState(), ...keep}; save(); closeModal(); location.hash = '#/dashboard'; render(); toast('All transactions cleared'); }); },
   resetDemo() { ask('Reset sample data', 'Replace everything entered in this browser with the original sample data?', {danger: true, ok: 'Reset'}, () => { seed(); save(); closeModal(); location.hash = '#/dashboard'; render(); toast('Sample data restored'); }); },
-  newDeal() { openModal('New deal', dealForm(), `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="dealForm">Save deal</button>`); },
+  newDeal() { openModal('New deal', dealForm(), `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="dealForm">Save deal</button>`, 'wide'); },
   reverseDeal(el) {
     const d = deal(el.dataset.id);
-    openModal('Reverse & re-enter ' + d.dealNo, dealForm({...d, replacesDealId: d.id}), `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="dealForm">Reverse &amp; save corrected deal</button>`);
+    openModal('Reverse & re-enter ' + d.dealNo, dealForm({...d, replacesDealId: d.id}), `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="dealForm">Reverse &amp; save corrected deal</button>`, 'wide');
   },
   cancelDeal(el) { ask('Cancel deal', 'The SAR is reversed out of the Saudi agent ledger. This cannot be undone.', {reason: true, danger: true, ok: 'Cancel deal'}, reason => run(() => A.cancelDeal(el.dataset.id, reason), 'Deal cancelled · reversal posted')); },
   assignDist(el) {
@@ -1471,7 +1512,7 @@ const ACT = {
   },
 };
 const FORMS = {
-  deal(v) { run(() => { if (v.replacesDealId) { A.cancelDeal(v.replacesDealId, 'Reversed for correction'); } const d = A.addDeal(v); location.hash = '#/deal/' + d.id; }, v.replacesDealId ? 'Original reversed · corrected deal saved' : 'Deal saved'); },
+  deal(v) { run(() => { if (v.replacesDealId) { A.cancelDeal(v.replacesDealId, 'Reversed for correction'); } const d = A.addDeal(v); location.hash = '#/deal/' + d.id; }, v.replacesDealId ? 'Original reversed · corrected deal saved' : 'Deal saved · distributor assigned'); },
   assign(v, f) { run(() => A.assignDistributor(f.dataset.id, v.distributorId, v.fee), 'Distributor assigned'); },
   batch(v, f) { run(() => { const b = A.createBatch({...v, dealIds: [...f.querySelectorAll('input[name=dealIds]:checked')].map(i => i.value)}); location.hash = '#/batch/' + b.id; }, 'Batch created'); },
   transit(v, f) { run(() => A.batchTransit(f.dataset.id, v.dubaiCollectorId), 'Marked in transit'); },
@@ -1515,6 +1556,7 @@ document.addEventListener('mousemove', e => {
 });
 document.addEventListener('input', e => { const f = e.target.closest('form[data-live]'); if (f) LIVE[f.dataset.live]?.(f, e.target); });
 document.addEventListener('change', e => {
+  if (e.target.tagName === 'SELECT') { const f = e.target.closest('form[data-live]'); if (f) LIVE[f.dataset.live]?.(f, e.target); }
   const el = e.target.closest('[data-filter]'); if (!el) return;
   const [grp, k] = el.dataset.filter.split('.'); UI[grp][k] = el.value; render();
 });
