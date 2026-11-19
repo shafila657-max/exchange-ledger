@@ -346,7 +346,7 @@ const nfIN = new Intl.NumberFormat('en-IN', {minimumFractionDigits: 2, maximumFr
 const nfUS = new Intl.NumberFormat('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const money = (n, c) => (n == null || isNaN(n)) ? '—' : (c === 'INR' ? '₹' + nfIN.format(n) : c + ' ' + nfUS.format(n));
 const signed = (n, c) => `<span class="${n > 0.004 ? 'pos' : n < -0.004 ? 'neg' : ''}">${money(n, c)}</span>`;
-const rate = n => { if (n == null || isNaN(n)) return '—'; const r = R6(n), d = (String(r).split('.')[1] || '').length; return d < 2 ? r.toFixed(2) : String(r); };
+const rate = n => { if (n == null || isNaN(n)) return '—'; const r = Math.round(n * 1e4) / 1e4, d = (String(r).split('.')[1] || '').length; return d < 2 ? r.toFixed(2) : String(r); };
 const fdate = s => s ? new Date(s.length === 10 ? s + 'T00:00:00' : s).toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'}) : '—';
 const fdt = s => s ? new Date(s).toLocaleString('en-GB', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'}) : '—';
 const num = v => { const n = parseFloat(v); return isNaN(n) ? NaN : n; };
@@ -365,19 +365,25 @@ const LOCK = '<span class="lock" title="Locked for audit">🔒 locked</span>';
 /* ============================ state ============================ */
 const KEY = 'xledger-prototype-v3';
 let S;
-const DEFAULT_SLABS = [{minSar: 0, discount: 1.00}, {minSar: 5000, discount: 0.70}, {minSar: 20000, discount: 0.45}, {minSar: 50000, discount: 0.25}, {minSar: 100000, discount: 0.10}];
+// Premium pricing, per ₹1,000 delivered: the Dubai agent quotes AED per ₹1,000; the customer (Saudi agent)
+// is charged SAR per ₹1,000 = Dubai quote + premium. Bigger deals get a smaller premium.
+const DEFAULT_SLABS = [{minInr: 0, premium: 2.00}, {minInr: 500000, premium: 1.80}, {minInr: 2000000, premium: 1.50}];
 function defaultSettings() {
-  return {marketSarInrRate: 24.80, referenceSarInrRate: 24.77, referenceAedInrRate: 25.30, defaultDistributorFeeInr: 50,
+  return {dubaiQuote: 39.52, sarAedRate: 0.979, marketSarInrRate: 24.77, referenceSarInrRate: 24.77, referenceAedInrRate: 25.30, defaultDistributorFeeInr: 50,
     slabs: DEFAULT_SLABS.map(x => ({...x})), rateLog: []};
 }
-const slabFor = (sar, slabs = S.settings.slabs) => [...slabs].sort((a, b) => b.minSar - a.minSar).find(x => sar >= x.minSar);
-const suggestRate = (sar, market) => R6(market - (slabFor(sar)?.discount ?? 0));
+const slabFor = (inr, slabs = S.settings.slabs) => [...slabs].sort((a, b) => b.minInr - a.minInr).find(x => inr >= x.minInr);
+const suggestCustRate = (inr, quote) => R4(quote + (slabFor(inr)?.premium ?? 0));
+const R4 = n => Math.round(n * 1e4) / 1e4;
+const lakh = n => n >= 100000 ? nfIN.format(n / 100000).replace(/\.00$/, '') + ' lakh' : new Intl.NumberFormat('en-IN').format(n);
 function slabLabel(sl) {
   if (!sl) return 'No slab';
-  const sorted = [...S.settings.slabs].sort((a, b) => a.minSar - b.minSar), i = sorted.indexOf(sl), next = sorted[i + 1];
-  const f = n => n >= 100000 ? nfIN.format(n / 100000).replace(/\.00$/, '') + ' lakh' : new Intl.NumberFormat('en-IN').format(n);
-  return next ? `${f(sl.minSar)} – ${f(next.minSar)} SAR` : `${f(sl.minSar)}+ SAR`;
+  const sorted = [...S.settings.slabs].sort((a, b) => a.minInr - b.minInr), i = sorted.indexOf(sl), next = sorted[i + 1];
+  return next ? `₹${lakh(sl.minInr)} – ${lakh(next.minInr)}` : `₹${lakh(sl.minInr)}+`;
 }
+// a deal's profit in SAR (net INR ÷ the SAR→INR rate it earned) — SAR is how the premium is quoted
+const profitSar = c => c.effRate > 0 ? R2(c.net / c.effRate) : 0;
+const sarInr = (sar, inr) => `${money(sar, 'SAR')} <span class="muted small">≈ ${money(inr, 'INR')}</span>`;
 function emptyState() {
   return {regions: [], parties: [], deals: [], batches: [], allocations: [],
     capital: [], settings: defaultSettings(), counters: {deal: 0, batch: 0, capital: 0}};
@@ -442,25 +448,27 @@ const A = {
   addDeal(f, at = nowISO()) {
     // INR-first: the agent asks for an amount to be delivered in India; SAR to collect = INR ÷ deal rate
     const inr = f.inrAmount != null && f.inrAmount !== '' ? num(f.inrAmount) : num(f.inrK) * 1000;
-    const r = num(f.dealRate), mkt = num(f.marketRate), est = num(f.estSarInrRate);
+    const q = num(f.dubaiQuote), c = num(f.sarAedRate), p = num(f.custRate);
     if (!(inr > 0)) fail('Enter the amount to deliver in India');
-    if (!(mkt > 0)) fail('Enter the market rate for this deal');
-    if (!(r > 0)) fail('Deal rate must be greater than 0');
-    if (!(est > 0)) fail('Enter the expected Dubai rate');
-    if (r > mkt * 1.05 || r < mkt * 0.9) fail('Deal rate ' + r + ' is far from market ' + mkt + ' — check for a typo');
-    const sl = slabFor(inr / mkt), sug = R6(mkt - (sl?.discount ?? 0)), sar = R2(inr / r);
+    if (!(q > 0)) fail("Enter the Dubai agent's quote (AED per ₹1,000)");
+    if (!(c > 0)) fail('Enter the SAR → AED rate');
+    if (!(p > 0)) fail('Customer rate must be greater than 0');
+    if (p > q * 1.3 || p < q * 0.9) fail('Customer rate ' + p + ' is far from the Dubai quote ' + q + ' — check for a typo');
+    const sl = slabFor(inr), sug = R4(q + (sl?.premium ?? 0)), sar = R2(inr / 1000 * p);
+    const r = 1000 / p, est = 1000 * c / q, override = Math.abs(R4(p) - sug) > 1e-6;
     if (!f.saudiAgentId) fail('Choose a Saudi agent');
     if (!f.recipientName?.trim()) fail('Recipient name is required');
     if (!f.regionId) fail('Choose a delivery region');
     const n = ++S.counters.deal;
     const d = {id: uid(), dealNo: 'D-' + String(n).padStart(4, '0'), dealDate: f.dealDate || at.slice(0, 10),
       saudiAgentId: f.saudiAgentId, sarAmount: R2(sar), dealRate: R6(r),
-      marketRate: R6(mkt), slab: sl ? {minSar: sl.minSar, discount: sl.discount, label: slabLabel(sl)} : undefined,
-      suggestedRate: sug, rateOverride: Math.abs(R6(r) - sug) > 1e-6,
+      dubaiQuote: R4(q), sarAedRate: R6(c), custRate: R4(p), premium: R4(p - q),
+      marketRate: R6(est), slab: sl ? {minInr: sl.minInr, premium: sl.premium, label: slabLabel(sl)} : undefined,
+      suggestedCustRate: sug, rateOverride: override,
       inrPayout: R2(inr), estSarInrRate: R6(est),
       recipientName: f.recipientName.trim(), recipientPhone: f.recipientPhone || '', recipientAddress: f.recipientAddress || '',
       regionId: f.regionId, distributorFeeInr: 0, status: 'pending_allocation',
-      history: [{status: 'pending_allocation', at, note: `Deal logged @ ${rate(r)} (market ${rate(mkt)}${Math.abs(R6(r) - sug) > 1e-6 ? ', slab rate ' + rate(sug) + ' overridden' : ', slab ' + (sl ? slabLabel(sl) : '—')})`}], replacesDealId: f.replacesDealId || undefined, createdAt: at};
+      history: [{status: 'pending_allocation', at, note: `Deal logged @ SAR ${rate(p)} per ₹1,000 (Dubai ${rate(q)} AED + premium ${rate(R4(p - q))}${override ? ', slab rate ' + rate(sug) + ' overridden' : ', slab ' + (sl ? slabLabel(sl) : '—')})`}], replacesDealId: f.replacesDealId || undefined, createdAt: at};
     S.deals.push(d); return d;
   },
   cancelDeal(id, reason, at = nowISO()) {
@@ -569,18 +577,19 @@ const A = {
     S.settings.defaultDistributorFeeInr = R2(fee);
   },
   setRates(f, at = nowISO()) {
-    const m = num(f.marketSarInrRate), y = num(f.referenceSarInrRate), a = num(f.referenceAedInrRate);
-    if (!(m > 0) || !(y > 0) || !(a > 0)) fail('All three rates must be greater than 0');
+    const q = num(f.dubaiQuote), c = num(f.sarAedRate);
+    if (!(q > 0) || !(c > 0)) fail('Both rates must be greater than 0');
     const st = S.settings;
-    st.marketSarInrRate = R6(m); st.referenceSarInrRate = R6(y); st.referenceAedInrRate = R6(a);
-    st.rateLog.push({at, market: st.marketSarInrRate, yieldRate: st.referenceSarInrRate, aed: st.referenceAedInrRate, note: f.note || ''});
+    st.dubaiQuote = R4(q); st.sarAedRate = R6(c);
+    st.referenceAedInrRate = R6(1000 / q); st.referenceSarInrRate = R6(1000 * c / q); st.marketSarInrRate = st.referenceSarInrRate;
+    st.rateLog.push({at, quote: st.dubaiQuote, sarAed: st.sarAedRate, yieldRate: st.referenceSarInrRate, aed: st.referenceAedInrRate, note: f.note || ''});
   },
   saveSlabs(rows) {
     if (!rows.length) fail('Keep at least one slab');
-    for (const r of rows) { if (!(r.minSar >= 0)) fail('Minimum SAR must be 0 or more'); if (isNaN(r.discount) || r.discount < -1 || r.discount > 5) fail('Discount must be between -1 and 5'); }
-    if (!rows.some(r => r.minSar === 0)) fail('One slab must start at 0 SAR');
-    if (new Set(rows.map(r => r.minSar)).size !== rows.length) fail('Two slabs have the same minimum');
-    S.settings.slabs = rows.map(r => ({minSar: R2(r.minSar), discount: R6(r.discount)})).sort((a, b) => a.minSar - b.minSar);
+    for (const r of rows) { if (!(r.minInr >= 0)) fail('Minimum ₹ must be 0 or more'); if (isNaN(r.premium) || r.premium < 0 || r.premium > 10) fail('Premium must be between 0 and 10'); }
+    if (!rows.some(r => r.minInr === 0)) fail('One slab must start at ₹0');
+    if (new Set(rows.map(r => r.minInr)).size !== rows.length) fail('Two slabs have the same minimum');
+    S.settings.slabs = rows.map(r => ({minInr: R2(r.minInr), premium: R4(r.premium)})).sort((a, b) => a.minInr - b.minInr);
   },
   capitalEntry(f, at = nowISO()) {
     const amt = num(f.amount); if (!(amt > 0)) fail('Amount must be greater than 0');
@@ -675,14 +684,15 @@ function seed() {
   const dch = P('distributor', 'Chennai Distributor', '+91 90000 00503', che.id);
   A.capitalEntry({kind: 'transfer', amount: 500000, currency: 'INR', partyId: op.id, toPartyId: dk.id, date: '2026-11-01', note: 'Float advance for Kerala payouts'}, t(1, 9));
   const distFor = {[ker.id]: dk, [mum.id]: dm, [che.id]: dch};
-  // market moves through the month; operator updates it a few times a day
-  const MKT = {2: 24.72, 3: 24.80, 4: 24.85, 10: 24.78, 11: 24.90, 12: 24.95, 15: 24.88, 16: 24.80, 17: 24.82, 18: 24.80};
-  Object.entries(MKT).forEach(([day, m]) => A.setRates({marketSarInrRate: m, referenceSarInrRate: R6(m - 0.03), referenceAedInrRate: R2((m - 0.03) / 0.979), note: +day === 18 ? 'Morning update' : ''}, t(+day, 5)));
-  // D(day, agent, ₹ thousands to deliver, recipient, address, region, overrideRate?)
-  const D = (day, a, k, name, addr, reg, override) => {
-    const m = MKT[day];
-    return A.addDeal({dealDate: t(day, 6).slice(0, 10), saudiAgentId: ag[a].id, inrK: k, marketRate: m, estSarInrRate: R6(m - 0.03),
-      dealRate: override ?? suggestRate(k * 1000 / m, m), recipientName: name, recipientPhone: '+91 90000 1' + String(S.counters.deal + 1).padStart(4, '0'),
+  // the Dubai quote moves through the month; operator updates it a few times a day
+  // Dubai agent's quote in AED per ₹1,000 — moves through the month
+  const DQ = {2: 39.58, 3: 39.52, 4: 39.45, 10: 39.55, 11: 39.40, 12: 39.33, 15: 39.42, 16: 39.52, 17: 39.48, 18: 39.52};
+  Object.entries(DQ).forEach(([day, q]) => A.setRates({dubaiQuote: q, sarAedRate: 0.979, note: +day === 18 ? 'Morning update' : ''}, t(+day, 5)));
+  // D(day, agent, ₹ thousands to deliver, recipient, address, region, overridePremium?)
+  const D = (day, a, k, name, addr, reg, overridePremium) => {
+    const q = DQ[day];
+    return A.addDeal({dealDate: t(day, 6).slice(0, 10), saudiAgentId: ag[a].id, inrK: k, dubaiQuote: q, sarAedRate: 0.979,
+      custRate: overridePremium != null ? R4(q + overridePremium) : suggestCustRate(k * 1000, q), recipientName: name, recipientPhone: '+91 90000 1' + String(S.counters.deal + 1).padStart(4, '0'),
       recipientAddress: addr, regionId: reg.id}, t(day, 6 + (S.counters.deal % 8)));
   };
   const b1 = [
@@ -707,7 +717,7 @@ function seed() {
   A.advanceDeal(b1[4].id, t(10, 9));
   const b2 = [
     D(10, 1, 48, 'Jaseela M', 'Kondotty, Malappuram', ker),
-    D(11, 4, 1480, 'Priya N (bulk)', 'Dadar West, Mumbai', mum, 24.70),
+    D(11, 4, 1480, 'Priya N (bulk)', 'Dadar West, Mumbai', mum, 1.60),
     D(11, 2, 95, 'Muneer T', 'Vadakara, Kozhikode', ker),
     D(12, 3, 22, 'Karthik V', 'Velachery, Chennai', che),
   ];
@@ -896,17 +906,17 @@ function dealTable(list, showFoot) {
     <td>${dealLink(d)}<div class="small muted">${fdate(d.dealDate)}</div></td>
     <td>${esc(pname(d.saudiAgentId))}</td>
     <td>${esc(d.recipientName)}<div class="small muted">${esc(rname(d.regionId))}</div></td>
-    <td class="num">${money(d.inrPayout, 'INR')}</td><td class="num">${rate(d.dealRate)}${d.rateOverride ? ' <span title="Manual override" style="color:var(--warn)">●</span>' : ''}<div class="small muted">mkt ${rate(d.marketRate)}</div></td><td class="num">${money(d.sarAmount, 'SAR')}</td>
-    <td class="num">${d.status === 'cancelled' ? '—' : signed(c.net, 'INR') + `<div class="small muted">${c.settled ? 'actual' : 'estimated'}</div>`}</td>
+    <td class="num">${money(d.inrPayout, 'INR')}</td><td class="num">${rate(d.custRate)}${d.rateOverride ? ' <span title="Manual premium" style="color:var(--warn)">●</span>' : ''}<div class="small muted">${rate(d.dubaiQuote)} + ${rate(d.premium)}</div></td><td class="num">${money(d.sarAmount, 'SAR')}</td>
+    <td class="num">${d.status === 'cancelled' ? '—' : signed(profitSar(c), 'SAR') + `<div class="small muted">≈ ${money(c.net, 'INR')} · ${c.settled ? 'actual' : 'est.'}</div>`}</td>
     <td>${d.batchId ? batchLink(batch(d.batchId)) : '<span class="muted">—</span>'}</td>
     <td>${d.distributorId ? esc(pname(d.distributorId)) : '<span class="muted">—</span>'}</td>
     <td>${dBadge(d)}</td></tr>`; }).join('');
   let foot = '';
   if (showFoot) {
     const l = list.filter(d => d.status !== 'cancelled');
-    foot = `<tfoot><tr><td colspan="3">${l.length} active deals</td><td class="num">${money(l.reduce((s, d) => s + d.inrPayout, 0), 'INR')}</td><td></td><td class="num">${money(l.reduce((s, d) => s + d.sarAmount, 0), 'SAR')}</td><td class="num">${money(l.reduce((s, d) => s + dealCalc(d).net, 0), 'INR')}</td><td colspan="3"></td></tr></tfoot>`;
+    foot = `<tfoot><tr><td colspan="3">${l.length} active deals</td><td class="num">${money(l.reduce((s, d) => s + d.inrPayout, 0), 'INR')}</td><td></td><td class="num">${money(l.reduce((s, d) => s + d.sarAmount, 0), 'SAR')}</td><td class="num">${money(l.reduce((s, d) => s + profitSar(dealCalc(d)), 0), 'SAR')}<div class="small muted">≈ ${money(l.reduce((s, d) => s + dealCalc(d).net, 0), 'INR')}</div></td><td colspan="3"></td></tr></tfoot>`;
   }
-  return `<div class="tw"><table class="wide deals"><thead><tr><th>Deal</th><th>Saudi agent</th><th>Recipient</th><th class="num">INR to deliver</th><th class="num">Deal rate</th><th class="num">SAR to collect</th><th class="num">Net profit</th><th>Batch</th><th>Distributor</th><th>Status</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div>`;
+  return `<div class="tw"><table class="wide deals"><thead><tr><th>Deal</th><th>Saudi agent</th><th>Recipient</th><th class="num">INR to deliver</th><th class="num">Rate /₹1000</th><th class="num">SAR to collect</th><th class="num">Profit</th><th>Batch</th><th>Distributor</th><th>Status</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div>`;
 }
 
 function pageDeals() {
@@ -956,18 +966,18 @@ function pageDeal(id) {
   <div class="card"><h2>Rate chain</h2>
     <div class="chain">
       <div class="c"><div class="l">INR to deliver</div><div class="v">${money(d.inrPayout, 'INR')}</div><div class="r">to ${esc(d.recipientName)}</div></div>
-      <div class="c"><div class="l">SAR collected</div><div class="v">${money(d.sarAmount, 'SAR')}</div><div class="r">= INR ÷ deal rate <b>${rate(d.dealRate)}</b> · by ${esc(pname(d.saudiAgentId))}</div></div>
+      <div class="c"><div class="l">SAR collected</div><div class="v">${money(d.sarAmount, 'SAR')}</div><div class="r">= ₹ ÷ 1,000 × <b>${rate(d.custRate)}</b> · by ${esc(pname(d.saudiAgentId))}</div></div>
       <div class="c"><div class="l">INR yield from Dubai</div><div class="v">${money(c.yieldInr, 'INR')}</div><div class="r">${c.settled ? 'effective ' + rate(c.effRate) + ' · ' + batchLink(b) : 'estimated @ ref ' + rate(c.effRate)}</div></div>
-      <div class="c"><div class="l">Operator net profit</div><div class="v ${c.net >= 0 ? 'pos' : 'neg'}">${money(c.net, 'INR')}</div><div class="r">spread ${money(c.gross, 'INR')} − fee ${money(c.fee, 'INR')}${c.feeExpected ? ' (expected)' : ''}</div></div>
+      <div class="c"><div class="l">Operator net profit</div><div class="v ${c.net >= 0 ? 'pos' : 'neg'}">${money(profitSar(c), 'SAR')}</div><div class="r">≈ ${money(c.net, 'INR')} · spread ${money(c.gross, 'INR')} − fee ${money(c.fee, 'INR')}${c.feeExpected ? ' (expected)' : ''}</div></div>
     </div>
     ${b && b.status === 'settled' ? `<div class="small muted" style="margin-top:10px">Batch ${b.batchNo}: avg SAR → AED ${rate(b.sarToAedRate)}, avg AED → INR (net) ${rate(b.aedToInrRate)} ⇒ effective SAR → INR ${rate(c.effRate)}. Locked at settlement.</div>` : ''}
   </div>
   <div class="card"><h2>Rates on this deal ${LOCK}</h2>
     <div class="chain">
-      <div class="c"><div class="l">Market at entry</div><div class="v">${rate(d.marketRate)}</div><div class="r">${fdt(d.createdAt)}</div></div>
-      <div class="c"><div class="l">Slab</div><div class="v" style="font-size:15px">${d.slab ? esc(d.slab.label) : '—'}</div><div class="r">market − ${d.slab ? d.slab.discount.toFixed(2) : '0'} = ${rate(d.suggestedRate)}</div></div>
-      <div class="c"><div class="l">Deal rate given</div><div class="v">${rate(d.dealRate)}</div><div class="r">${d.rateOverride ? '<span style="color:var(--warn)">manual override</span>' : 'slab rate'} · ${rate(R6(d.marketRate - d.dealRate))} below market</div></div>
-      <div class="c"><div class="l">Kept vs market</div><div class="v">${money(R2(d.sarAmount * d.marketRate - d.inrPayout), 'INR')}</div><div class="r">expected Dubai yield ${rate(d.estSarInrRate)}</div></div>
+      <div class="c"><div class="l">Dubai quote at entry</div><div class="v">${rate(d.dubaiQuote)} <span class="small muted">AED</span></div><div class="r">per ₹1,000 · ${fdt(d.createdAt)}</div></div>
+      <div class="c"><div class="l">Premium</div><div class="v">+ ${rate(d.premium)}</div><div class="r">${d.rateOverride ? '<span style="color:var(--warn)">manual</span> · slab ' + (d.slab ? esc(d.slab.label) + ' = +' + rate(d.slab.premium) : '—') : 'slab ' + (d.slab ? esc(d.slab.label) : '—')}</div></div>
+      <div class="c"><div class="l">Customer rate</div><div class="v">${rate(d.custRate)} <span class="small muted">SAR</span></div><div class="r">per ₹1,000 · = ${rate(R2(d.dealRate))} ₹ per SAR</div></div>
+      <div class="c"><div class="l">Dubai cost</div><div class="v">${money(R2(d.inrPayout / 1000 * d.dubaiQuote), 'AED')}</div><div class="r">≈ ${money(R2(d.inrPayout / 1000 * d.dubaiQuote / d.sarAedRate), 'SAR')} at SAR → AED ${rate(d.sarAedRate)}</div></div>
     </div></div>
   <div class="grid g2">
     <div class="card"><h2>Recipient &amp; delivery</h2><dl class="kv">
@@ -1021,8 +1031,8 @@ function pageBatch(id) {
       <div>${aedLeft > 0.004 ? `<form data-form="settle" data-live="settle" data-id="${b.id}"><h2 style="font-size:14px">Record a settlement part · AED → INR</h2><div class="fg">
           ${agentField}
           <label class="f">AED in this part <span class="muted">(unsettled ${money(aedLeft, 'AED')})</span><input name="aed" type="number" step="any" min="0" value="${aedLeft}" required></label>
-          <label class="f">Net AED → INR rate<input name="rate" type="number" step="any" min="0" placeholder="e.g. 25.32" required></label>
-          <label class="f">Market AED → INR <span class="muted">(optional)</span><input name="marketRate" type="number" step="any" min="0" placeholder="e.g. 25.48"></label>
+          <label class="f">Dubai rate (AED per ₹1,000)<input name="quote" type="number" step="any" min="0" placeholder="e.g. 39.50" required></label>
+          <label class="f">Market AED per ₹1,000 <span class="muted">(optional)</span><input name="marketQuote" type="number" step="any" min="0" placeholder="e.g. 39.25"></label>
           <label class="f full">Note<input name="note" placeholder="optional"></label>
           <div class="preview full" id="pv-settle"></div></div>
           <div class="row" style="margin-top:10px"><button class="btn pri">Add settlement part</button></div></form>` : `<div class="preview">${b.aedAmount ? 'All converted AED is settled ✓' : 'Convert some SAR first. AED can be settled part by part as it is converted.'}</div>`}</div>
@@ -1036,8 +1046,8 @@ function pageBatch(id) {
       ${forms}
       ${(b.conversions || []).length ? `<h2 style="font-size:14px;margin-top:18px">Conversion parts</h2><div class="tw"><table><thead><tr><th>When</th><th class="num">SAR</th><th class="num">Rate</th><th class="num">AED</th><th>Note</th><th></th></tr></thead><tbody>
         ${b.conversions.map(t => partRow('conv', t, `<td class="num">${money(t.sar, 'SAR')}</td><td class="num">${rate(t.rate)}</td><td class="num">${money(t.aed, 'AED')}</td>`)).join('')}</tbody></table></div>` : ''}
-      ${(b.settlements || []).length ? `<h2 style="font-size:14px;margin-top:18px">Settlement parts · ${esc(pname(b.dubaiAgentId))}</h2><div class="tw"><table><thead><tr><th>When</th><th class="num">AED</th><th class="num">Net rate</th><th class="num">Market</th><th class="num">INR</th><th>Note</th><th></th></tr></thead><tbody>
-        ${b.settlements.map(t => partRow('settle', t, `<td class="num">${money(t.aed, 'AED')}</td><td class="num">${rate(t.rate)}</td><td class="num">${rate(t.marketRate)}</td><td class="num">${money(t.inr, 'INR')}</td>`)).join('')}</tbody></table></div>` : ''}
+      ${(b.settlements || []).length ? `<h2 style="font-size:14px;margin-top:18px">Settlement parts · ${esc(pname(b.dubaiAgentId))}</h2><div class="tw"><table><thead><tr><th>When</th><th class="num">AED</th><th class="num">AED /₹1000</th><th class="num">Market</th><th class="num">INR</th><th>Note</th><th></th></tr></thead><tbody>
+        ${b.settlements.map(t => partRow('settle', t, `<td class="num">${money(t.aed, 'AED')}</td><td class="num">${rate(R4(1000 / t.rate))}</td><td class="num">${t.marketRate ? rate(R4(1000 / t.marketRate)) : '—'}</td><td class="num">${money(t.inr, 'INR')}</td>`)).join('')}</tbody></table></div>` : ''}
     </div>`;
     if (b.inrYield > 0) panel += `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">INR paid by Dubai agent to distributors</h2><button class="btn pri sm" data-act="addAlloc" data-id="${b.id}" ${allocated >= b.inrYield - 0.004 ? 'disabled' : ''}>+ Record payment</button></div>
     <div style="margin:12px 0"><div class="bar"><i style="width:${Math.min(100, allocated / b.inrYield * 100)}%"></i></div><div class="small muted" style="margin-top:4px">${money(allocated, 'INR')} of ${money(b.inrYield, 'INR')} paid out · ${money(b.inrYield - allocated, 'INR')} still with Dubai agent</div></div>
@@ -1133,7 +1143,7 @@ function pageReports() {
     <label class="f">To<input type="date" data-filter="report.to" value="${r.to}"></label>
     <label class="f">Group by<select data-filter="report.group">${Object.entries(G).map(([k, v]) => `<option value="${k}" ${r.group === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
   <h2>Profit by ${G[r.group].toLowerCase()}</h2>
-  <div class="tw"><table><thead><tr><th>${G[r.group]}</th><th class="num">Deals</th><th class="num">SAR</th><th class="num">Avg market</th><th class="num">Avg deal rate</th><th class="num">Avg Dubai rate</th><th class="num">INR payout</th><th class="num">Fees</th><th class="num">Realised profit</th><th class="num">Estimated (unsettled)</th></tr></thead>
+  <div class="tw"><table><thead><tr><th>${G[r.group]}</th><th class="num">Deals</th><th class="num">SAR</th><th class="num">Est. ₹ per SAR</th><th class="num">Customer ₹ per SAR</th><th class="num">Actual ₹ per SAR</th><th class="num">INR payout</th><th class="num">Fees</th><th class="num">Realised profit</th><th class="num">Estimated (unsettled)</th></tr></thead>
   <tbody>${rows.map(x => tr(x)).join('') || '<tr><td colspan="10" class="empty">No deals in range</td></tr>'}</tbody>${rows.length ? `<tfoot>${tr(tot, true)}</tfoot>` : ''}</table></div></div>
   <div class="card"><h2>Rate difference by settled batch</h2>
   <div class="tw"><table><thead><tr><th>Batch</th><th class="num">SAR</th><th class="num">SAR→AED</th><th class="num">AED→INR net</th><th class="num">Effective SAR→INR</th><th class="num">Avg deal rate</th><th class="num">Spread / SAR</th><th class="num">Dubai agent margin</th><th class="num">Net profit</th></tr></thead><tbody>
@@ -1145,24 +1155,24 @@ function pageReports() {
 
 function pageSettings() {
   const s = S.settings, log = s.rateLog.slice().reverse();
-  const slabs = [...s.slabs].sort((a, b) => a.minSar - b.minSar);
+  const slabs = [...s.slabs].sort((a, b) => a.minInr - b.minInr);
   return `
-  <div class="head"><div><h1>Settings</h1><div class="muted small">Rates change all day. Update the market here or from the button in the top bar.</div></div></div>
+  <div class="head"><div><h1>Settings</h1><div class="muted small">Rates change all day. Update the Dubai quote here or from the button in the top bar.</div></div></div>
   <div class="grid g2">
     <div class="card"><div class="cardh"><h2>Today's rates</h2><button class="btn pri sm" data-act="rates">Update rates</button></div>
       <div class="chain" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-        <div class="c"><div class="l">Market SAR → INR</div><div class="v">${rate(s.marketSarInrRate)}</div></div>
-        <div class="c"><div class="l">Expected Dubai yield</div><div class="v">${rate(s.referenceSarInrRate)}</div><div class="r">SAR → INR via AED</div></div>
-        <div class="c"><div class="l">AED → INR ref</div><div class="v">${rate(s.referenceAedInrRate)}</div></div>
+        <div class="c"><div class="l">Dubai quote</div><div class="v">${rate(s.dubaiQuote)}</div><div class="r">AED per ₹1,000</div></div>
+        <div class="c"><div class="l">SAR → AED</div><div class="v">${rate(s.sarAedRate)}</div></div>
+        <div class="c"><div class="l">Works out to</div><div class="v">${rate(R2(s.referenceSarInrRate))}</div><div class="r">₹ per SAR via AED</div></div>
       </div>
-      ${log.length > 1 ? `<div style="margin-top:14px"><div class="small muted" style="margin-bottom:4px">Market rate trend</div>${sparkline(s.rateLog.map(x => x.market - Math.min(...s.rateLog.map(y => y.market)) + 0.01)).replace('class="spark"', 'class="spark" style="width:100%;height:48px" preserveAspectRatio="none"')}</div>` : ''}
-      <div class="tw" style="margin-top:10px;max-height:240px;overflow:auto"><table><thead><tr><th>Updated</th><th class="num">Market</th><th class="num">Dubai yield</th><th class="num">AED→INR</th><th>Note</th></tr></thead><tbody>
-        ${log.map(x => `<tr><td>${fdt(x.at)}</td><td class="num">${rate(x.market)}</td><td class="num">${rate(x.yieldRate)}</td><td class="num">${rate(x.aed)}</td><td class="small muted">${esc(x.note) || '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No rate updates yet</td></tr>'}
+      ${log.length > 1 ? `<div style="margin-top:14px"><div class="small muted" style="margin-bottom:4px">Dubai quote trend</div>${sparkline(s.rateLog.map(x => x.quote - Math.min(...s.rateLog.map(y => y.quote)) + 0.01)).replace('class="spark"', 'class="spark" style="width:100%;height:48px" preserveAspectRatio="none"')}</div>` : ''}
+      <div class="tw" style="margin-top:10px;max-height:240px;overflow:auto"><table><thead><tr><th>Updated</th><th class="num">Dubai AED/₹1000</th><th class="num">SAR→AED</th><th class="num">₹ per SAR</th><th>Note</th></tr></thead><tbody>
+        ${log.map(x => `<tr><td>${fdt(x.at)}</td><td class="num">${rate(x.quote)}</td><td class="num">${rate(x.sarAed)}</td><td class="num">${rate(R2(x.yieldRate))}</td><td class="small muted">${esc(x.note) || '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No rate updates yet</td></tr>'}
       </tbody></table></div></div>
-    <div class="card"><h2>Bulk rate slabs</h2>
-      <div class="small muted" style="margin-bottom:10px">Bigger deals get a rate closer to market. Each slab is a discount below the market rate, so suggestions move with the market. Every deal can still be overridden.</div>
-      <form data-form="slabs"><div class="tw"><table><thead><tr><th>From SAR</th><th>Discount below market</th><th class="num">Rate at ${rate(s.marketSarInrRate)}</th><th class="num">e.g. INR per 1 lakh SAR</th><th></th></tr></thead><tbody>
-        ${slabs.map((x, i) => `<tr data-slab><td><input name="minSar" type="number" step="any" min="0" value="${x.minSar}" style="width:120px"></td><td><input name="discount" type="number" step="any" value="${x.discount}" style="width:90px"></td><td class="num"><b>${rate(R6(s.marketSarInrRate - x.discount))}</b></td><td class="num muted">${money(100000 * (s.marketSarInrRate - x.discount), 'INR')}</td><td class="num"><button type="button" class="btn sm dan" data-act="delSlab" data-i="${s.slabs.indexOf(x)}" ${slabs.length < 2 ? 'disabled' : ''}>Remove</button></td></tr>`).join('')}
+    <div class="card"><h2>Premium slabs</h2>
+      <div class="small muted" style="margin-bottom:10px">Customer rate per ₹1,000 = Dubai quote + premium. Bigger deals get a smaller premium. Suggestions follow the Dubai quote; every deal can still be overridden.</div>
+      <form data-form="slabs"><div class="tw"><table><thead><tr><th>From ₹</th><th>Premium (SAR per ₹1,000)</th><th class="num">Customer rate at ${rate(s.dubaiQuote)}</th><th class="num">SAR for ₹1 lakh</th><th></th></tr></thead><tbody>
+        ${slabs.map((x, i) => `<tr data-slab><td><input name="minInr" type="number" step="any" min="0" value="${x.minInr}" style="width:120px"></td><td><input name="premium" type="number" step="any" value="${x.premium}" style="width:90px"></td><td class="num"><b>${rate(R4(s.dubaiQuote + x.premium))}</b></td><td class="num muted">${money(100 * (s.dubaiQuote + x.premium), 'SAR')}</td><td class="num"><button type="button" class="btn sm dan" data-act="delSlab" data-i="${s.slabs.indexOf(x)}" ${slabs.length < 2 ? 'disabled' : ''}>Remove</button></td></tr>`).join('')}
       </tbody></table></div>
       <div class="row" style="margin-top:12px"><button type="button" class="btn sm" data-act="addSlab">+ Add slab</button><span style="flex:1"></span><button class="btn pri">Save slabs</button></div></form></div>
   </div>
@@ -1175,7 +1185,7 @@ function pageSettings() {
       <table><tbody>${S.regions.map(r => `<tr><td>${esc(r.name)}</td><td class="num small muted">${S.parties.filter(p => p.regionId === r.id).length} distributors · ${S.deals.filter(d => d.regionId === r.id).length} deals</td></tr>`).join('')}</tbody></table></div>
   </div>
   <div class="card"><h2>How rates and corrections work</h2><div class="small" style="max-width:760px">
-    <ul style="margin:0;padding-left:18px"><li>Every deal stores its <b>own</b> market rate, deal rate, slab and expected Dubai yield. Changing today's rates never alters saved deals.</li>
+    <ul style="margin:0;padding-left:18px"><li>Every deal stores its <b>own</b> Dubai quote, premium, customer rate and SAR → AED rate. Changing today's rates never alters saved deals.</li>
     <li>Every batch stores its <b>own</b> SAR → AED and AED → INR rates, entered at each step.</li>
     <li>Saved deals and settled batches are <b>locked</b>. A deal not yet in a batch can be fixed with <i>Reverse &amp; re-enter</i>. A deal in an unsettled batch needs the batch reversed first. Settled batches stay locked until the client decides how to handle them.</li></ul></div></div>`;
 }
@@ -1292,17 +1302,17 @@ function pageBalances() {
 /* ============================ modals ============================ */
 function dealForm(pre = {}) {
   const st = S.settings, isRe = !!pre.replacesDealId;
-  const mkt = isRe ? pre.marketRate : st.marketSarInrRate, est = isRe ? pre.estSarInrRate : st.referenceSarInrRate;
+  const q = isRe ? pre.dubaiQuote : st.dubaiQuote, c = isRe ? pre.sarAedRate : st.sarAedRate;
   return `<form data-form="deal" data-live="deal" id="dealForm"><input type="hidden" name="replacesDealId" value="${pre.replacesDealId || ''}">
   ${isRe ? `<div class="alert">Correcting ${deal(pre.replacesDealId).dealNo}. The original will be cancelled with a reversal entry when you save.</div>` : ''}
   <div class="fg">
     <label class="f">Deal date<input name="dealDate" type="date" value="${pre.dealDate || todayStr()}" required></label>
     <label class="f">Saudi agent<select name="saudiAgentId" required>${opts(partiesOf('saudi_agent'), pre.saudiAgentId, 'Choose agent')}</select></label>
     <label class="f full">Amount to deliver in India (₹ in thousands) <span class="muted" id="inrWords"></span><input name="inrK" type="number" step="any" min="0" value="${pre.inrPayout != null ? R6(pre.inrPayout / 1000) : ''}" placeholder="e.g. 10 = ₹10,000" required></label>
-    <label class="f">Market rate now (SAR → INR)<input name="marketRate" type="number" step="any" min="0" value="${mkt ?? ''}" required></label>
-    <label class="f">Deal rate given (SAR → INR) <span class="muted" id="rateMode"></span>
-      <div class="row" style="flex-wrap:nowrap"><input name="dealRate" type="number" step="any" min="0" value="${pre.dealRate ?? ''}" data-auto="${isRe ? '0' : '1'}" required><button type="button" class="btn sm" data-act="useSlab" title="Reset to slab rate">↺ Slab</button></div></label>
-    <label class="f">Expected Dubai yield (SAR → INR)<input name="estSarInrRate" type="number" step="any" min="0" value="${est ?? ''}" required></label>
+    <label class="f">Dubai quote (AED per ₹1,000)<input name="dubaiQuote" type="number" step="any" min="0" value="${q ?? ''}" required></label>
+    <label class="f">Customer rate (SAR per ₹1,000) <span class="muted" id="rateMode"></span>
+      <div class="row" style="flex-wrap:nowrap"><input name="custRate" type="number" step="any" min="0" value="${pre.custRate ?? ''}" data-auto="${isRe ? '0' : '1'}" required><button type="button" class="btn sm" data-act="useSlab" title="Reset to Dubai quote + slab premium">↺ Slab</button></div></label>
+    <label class="f">SAR → AED rate<input name="sarAedRate" type="number" step="any" min="0" value="${c ?? ''}" required></label>
     <div class="preview" id="pv-deal" style="grid-row:span 2"></div>
     <label class="f">Recipient name<input name="recipientName" value="${esc(pre.recipientName || '')}" required></label>
     <label class="f">Recipient phone<input name="recipientPhone" value="${esc(pre.recipientPhone || '')}"></label>
@@ -1313,33 +1323,35 @@ function dealForm(pre = {}) {
 const LIVE = {
   deal(f, target) {
     const el = document.getElementById('pv-deal'); if (!el) return;
-    const dr = f.dealRate;
+    const dr = f.custRate;
     if (target === dr) dr.dataset.auto = '0';
-    const inr = R2(num(f.inrK.value) * 1000), mkt = num(f.marketRate.value), est = num(f.estSarInrRate.value), fee = S.settings.defaultDistributorFeeInr;
+    const inr = R2(num(f.inrK.value) * 1000), q = num(f.dubaiQuote.value), c = num(f.sarAedRate.value), fee = S.settings.defaultDistributorFeeInr;
     document.getElementById('inrWords').textContent = inr > 0 ? '= ' + money(inr, 'INR') : '';
-    const sarAtMkt = inr > 0 && mkt > 0 ? inr / mkt : 0;
-    const sl = sarAtMkt > 0 ? slabFor(sarAtMkt) : null, sug = sarAtMkt > 0 ? suggestRate(sarAtMkt, mkt) : NaN;
+    const sl = inr > 0 ? slabFor(inr) : null, sug = inr > 0 && q > 0 ? suggestCustRate(inr, q) : NaN;
     if (dr.dataset.auto === '1' && sug > 0) dr.value = sug;
-    const r = num(dr.value);
-    document.getElementById('rateMode').innerHTML = dr.dataset.auto === '1' ? '· slab rate' : (sug > 0 && Math.abs(r - sug) > 1e-6 ? '<span style="color:var(--warn)">· manual override</span>' : '· manual');
-    if (!(inr > 0 && r > 0 && mkt > 0 && est > 0)) { el.innerHTML = '<span class="muted">Enter the INR amount and rates to preview</span>'; return; }
-    const sar = R2(inr / r), pay = inr, kept = R2(sar * mkt - inr), y = R2(sar * est), net = R2(y - pay - fee);
-    const warn = r > mkt * 1.05 || r < mkt * 0.9;
-    el.innerHTML = `<div class="small muted" style="margin-bottom:6px">Slab <b style="color:var(--text)">${sl ? slabLabel(sl) : '—'}</b> · market − ${sl ? sl.discount.toFixed(2) : '0'} = <b style="color:var(--text)">${rate(sug)}</b></div>
-      <dl class="kv"><dt>Deliver in India</dt><dd><b>${money(pay, 'INR')}</b></dd>
-      <dt>SAR to collect (${money(pay, 'INR')} ÷ ${rate(r)})</dt><dd><b>${money(sar, 'SAR')}</b></dd>
-      <dt>Kept vs market (SAR × ${rate(mkt)} − INR)</dt><dd>${money(kept, 'INR')}</dd>
-      <dt>Est. Dubai yield @ ${rate(est)}</dt><dd>${money(y, 'INR')}</dd>
-      <dt>Est. net profit (fee ${money(fee, 'INR')})</dt><dd class="${net >= 0 ? 'pos' : 'neg'}"><b>${money(net, 'INR')}</b></dd></dl>
-      ${warn ? '<div class="small neg" style="margin-top:6px">Deal rate is far from market — check for a typo</div>' : ''}${net < 0 ? '<div class="small neg" style="margin-top:6px">This deal loses money at the expected Dubai rate</div>' : ''}`;
+    const p = num(dr.value);
+    document.getElementById('rateMode').innerHTML = dr.dataset.auto === '1' ? '· slab premium' : (sug > 0 && Math.abs(p - sug) > 1e-6 ? '<span style="color:var(--warn)">· manual premium</span>' : '· manual');
+    if (!(inr > 0 && p > 0 && q > 0 && c > 0)) { el.innerHTML = '<span class="muted">Enter the ₹ amount and rates to preview</span>'; return; }
+    const k = inr / 1000, sar = R2(k * p), aedCost = R2(k * q), sarCost = R2(aedCost / c), feeSar = R2(fee * q / 1000 / c);
+    const profit = R2(sar - sarCost - feeSar), perK = R4(p - q / c), est = 1000 * c / q, net = R2(sar * est - inr - fee);
+    const warn = p > q * 1.3 || p < q * 0.9;
+    el.innerHTML = `<div class="small muted" style="margin-bottom:6px">Slab <b style="color:var(--text)">${sl ? slabLabel(sl) : '—'}</b> · Dubai ${rate(q)} + premium ${rate(R4(p - q))} = <b style="color:var(--text)">${rate(p)}</b></div>
+      <dl class="kv"><dt>Deliver in India</dt><dd><b>${money(inr, 'INR')}</b></dd>
+      <dt>SAR to collect (${R4(k)} × ${rate(p)})</dt><dd><b>${money(sar, 'SAR')}</b></dd>
+      <dt>Dubai cost (${R4(k)} × ${rate(q)} AED)</dt><dd>${money(aedCost, 'AED')}</dd>
+      <dt>…in SAR (÷ ${rate(c)})</dt><dd>${money(sarCost, 'SAR')}</dd>
+      <dt>Distributor fee ${money(fee, 'INR')}</dt><dd>${money(feeSar, 'SAR')}</dd>
+      <dt>Profit per ₹1,000 (${rate(p)} − ${rate(q)} ÷ ${rate(c)})</dt><dd>${money(perK, 'SAR')}</dd>
+      <dt>Est. net profit</dt><dd class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit, 'SAR')}</b><div class="small muted">≈ ${money(net, 'INR')}</div></dd></dl>
+      ${warn ? '<div class="small neg" style="margin-top:6px">Customer rate is far from the Dubai quote — check for a typo</div>' : ''}${profit < 0 ? '<div class="small neg" style="margin-top:6px">This deal loses money at this Dubai quote</div>' : ''}`;
   },
   convert(f) {
     const sar = num(f.sar.value), r = num(f.rate.value), el = document.getElementById('pv-convert');
     el.innerHTML = sar > 0 && r > 0 ? `<dl class="kv"><dt>${money(sar, 'SAR')} × ${rate(r)}</dt><dd><b>${money(R2(sar * r), 'AED')}</b></dd></dl>` : '<span class="muted">Enter SAR and rate to preview AED</span>';
   },
   settle(f) {
-    const b = batch(f.dataset.id), aed = num(f.aed.value), r = num(f.rate.value), m = num(f.marketRate.value), el = document.getElementById('pv-settle');
-    if (!(aed > 0 && r > 0)) { el.innerHTML = '<span class="muted">Enter AED and net rate to preview</span>'; return; }
+    const b = batch(f.dataset.id), aed = num(f.aed.value), qv = num(f.quote.value), mq = num(f.marketQuote.value), r = qv > 0 ? 1000 / qv : 0, m = mq > 0 ? 1000 / mq : 0, el = document.getElementById('pv-settle');
+    if (!(aed > 0 && r > 0)) { el.innerHTML = '<span class="muted">Enter AED and the Dubai rate to preview</span>'; return; }
     const inr = R2(aed * r);
     const completes = b.status === 'converted_aed' && aed >= (b.aedAmount - (b.aedSettled || 0)) - 0.004;
     let extra = '';
@@ -1360,18 +1372,17 @@ const ACT = {
   menu() { document.body.classList.toggle('menu-open'); },
   closeModal,
   reverseTranche(el) { ask('Reverse this part', 'The part stays in the record, crossed out, with reversing ledger entries.', {reason: true, danger: true, ok: 'Reverse part'}, reason => run(() => A.reverseTranche(el.dataset.id, el.dataset.kind, el.dataset.tid, reason), 'Part reversed')); },
-  useSlab() { const f = document.getElementById('dealForm'); f.dealRate.dataset.auto = '1'; LIVE.deal(f); },
+  useSlab() { const f = document.getElementById('dealForm'); f.custRate.dataset.auto = '1'; LIVE.deal(f); },
   rates() {
     const st = S.settings;
     openModal("Update today's rates", `<form data-form="rates" id="ratesForm"><div class="fg">
-      <label class="f full">Market rate (SAR → INR)<input name="marketSarInrRate" type="number" step="any" value="${st.marketSarInrRate}" required><span class="muted" style="font-weight:400">New deals start from this. Slab rates follow it automatically.</span></label>
-      <label class="f">Expected Dubai yield (SAR → INR)<input name="referenceSarInrRate" type="number" step="any" value="${st.referenceSarInrRate}" required></label>
-      <label class="f">AED → INR reference<input name="referenceAedInrRate" type="number" step="any" value="${st.referenceAedInrRate}" required></label>
+      <label class="f full">Dubai agent's quote (AED per ₹1,000)<input name="dubaiQuote" type="number" step="any" value="${st.dubaiQuote}" required><span class="muted" style="font-weight:400">New deals start from this. Customer rate = this + premium.</span></label>
+      <label class="f full">SAR → AED rate<input name="sarAedRate" type="number" step="any" value="${st.sarAedRate}" required><span class="muted" style="font-weight:400">AED you get for 1 SAR, e.g. 0.979</span></label>
       <label class="f full">Note<input name="note" placeholder="optional, e.g. 2pm update"></label>
       <div class="full small muted">Saved deals and batches keep the rates they were made with. This only changes the starting values for new deals and how unsettled SAR/AED is valued.</div>
     </div></form>`, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="ratesForm">Save rates</button>`);
   },
-  addSlab() { const sl = S.settings.slabs; sl.push({minSar: (Math.max(...sl.map(x => x.minSar)) || 0) + 50000, discount: 0}); save(); render(); },
+  addSlab() { const sl = S.settings.slabs; sl.push({minInr: (Math.max(...sl.map(x => x.minInr)) || 0) + 500000, premium: 1}); save(); render(); },
   delSlab(el) { S.settings.slabs.splice(+el.dataset.i, 1); save(); render(); },
   capital(el) {
     const k = el.dataset.kind;
@@ -1443,8 +1454,8 @@ const ACT = {
   exportCsv() {
     const r = UI.report;
     const ds = S.deals.filter(d => (!r.from || d.dealDate >= r.from) && (!r.to || d.dealDate <= r.to));
-    const head = ['Deal', 'Date', 'Saudi agent', 'Recipient', 'Region', 'SAR', 'Market rate', 'Slab', 'Override', 'Deal rate', 'INR payout', 'Effective rate', 'INR Dubai yield', 'Fee', 'Net profit', 'Profit basis', 'Batch', 'Distributor', 'Status'];
-    const rows = ds.map(d => { const c = dealCalc(d); return [d.dealNo, d.dealDate, pname(d.saudiAgentId), d.recipientName, rname(d.regionId), d.sarAmount, d.marketRate, d.slab?.label || '', d.rateOverride ? 'yes' : '', d.dealRate, d.inrPayout, c.effRate, c.yieldInr, c.fee, d.status === 'cancelled' ? '' : c.net, c.settled ? 'actual' : 'estimated', d.batchId ? batch(d.batchId).batchNo : '', d.distributorId ? pname(d.distributorId) : '', DS[d.status][0]]; });
+    const head = ['Deal', 'Date', 'Saudi agent', 'Recipient', 'Region', 'SAR', 'Dubai quote (AED/₹1000)', 'Slab', 'Override', 'Premium', 'Customer rate (SAR/₹1000)', 'INR payout', 'Effective rate', 'INR Dubai yield', 'Fee', 'Net profit INR', 'Net profit SAR', 'Profit basis', 'Batch', 'Distributor', 'Status'];
+    const rows = ds.map(d => { const c = dealCalc(d); return [d.dealNo, d.dealDate, pname(d.saudiAgentId), d.recipientName, rname(d.regionId), d.sarAmount, d.dubaiQuote, d.slab?.label || '', d.rateOverride ? 'yes' : '', d.premium, d.custRate, d.inrPayout, c.effRate, c.yieldInr, c.fee, d.status === 'cancelled' ? '' : c.net, d.status === 'cancelled' ? '' : profitSar(c), c.settled ? 'actual' : 'estimated', d.batchId ? batch(d.batchId).batchNo : '', d.distributorId ? pname(d.distributorId) : '', DS[d.status][0]]; });
     const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const filename = `deals_${r.from || 'all'}_${r.to || 'all'}.csv`;
     (async () => {
@@ -1466,6 +1477,7 @@ const FORMS = {
   transit(v, f) { run(() => A.batchTransit(f.dataset.id, v.dubaiCollectorId), 'Marked in transit'); },
   convert(v, f) { run(() => A.batchConvert(f.dataset.id, v), 'Conversion part recorded'); },
   settle(v, f) {
+    v = {...v, rate: num(v.quote) > 0 ? 1000 / num(v.quote) : 0, marketRate: num(v.marketQuote) > 0 ? 1000 / num(v.marketQuote) : undefined};
     const b = batch(f.dataset.id), completes = b.status === 'converted_aed' && num(v.aed) >= (b.aedAmount - (b.aedSettled || 0)) - 0.004;
     const go = () => run(() => A.batchSettle(f.dataset.id, v), completes ? 'Batch fully settled · rates locked' : 'Settlement part recorded');
     if (completes) ask('Complete & lock batch', 'This part completes the batch. All its rates and per-deal profit become permanent.', {ok: 'Settle & lock'}, go); else go();
@@ -1474,7 +1486,7 @@ const FORMS = {
   party(v) { run(() => A.saveParty({...v, active: v.id ? v.active === 'on' : true}), 'Saved'); },
   settings(v) { run(() => A.saveSettings(v), 'Settings saved'); },
   rates(v) { run(() => A.setRates(v), "Today's rates updated"); },
-  slabs(v, f) { run(() => A.saveSlabs([...f.querySelectorAll('[data-slab]')].map(r => ({minSar: num(r.querySelector('[name=minSar]').value), discount: num(r.querySelector('[name=discount]').value)}))), 'Rate slabs saved'); },
+  slabs(v, f) { run(() => A.saveSlabs([...f.querySelectorAll('[data-slab]')].map(r => ({minInr: num(r.querySelector('[name=minInr]').value), premium: num(r.querySelector('[name=premium]').value)}))), 'Rate slabs saved'); },
   capital(v) { run(() => A.capitalEntry(v), 'Capital entry saved'); },
   region(v) { run(() => A.addRegion(v.name || ''), 'Region added'); },
   ask(v) { const cb = ASK_CB; ASK_CB = null; if (cb) cb((v.reason || '').trim()); },
@@ -1518,7 +1530,7 @@ function render() {
   document.getElementById('nav').innerHTML = NAV_SECTIONS.map(([sec, items]) => `<div class="navsec">${sec}</div>` + items.map(([k, l]) =>
     `<a href="#/${k}" class="${k === navKey ? 'on' : ''}">${icon(k)}<span>${l}</span>${cnt[k] ? `<span class="cnt" title="Needs action">${cnt[k]}</span>` : ''}</a>`).join('')).join('');
   document.getElementById('ptitle').textContent = TITLES[page] || '';
-  document.getElementById('pactions').innerHTML = `<button class="btn" data-act="rates" title="Update today's rates"><span class="hide-m">Market</span> <b style="font-variant-numeric:tabular-nums">${rate(S.settings.marketSarInrRate)}</b> <span class="muted small hide-m">${S.settings.rateLog.length ? fdt(S.settings.rateLog.at(-1).at) : ''}</span></button><button class="btn ico-m" data-act="newBatch" title="New batch">${icon('batches')}<span class="hide-m">New batch</span></button><button class="btn pri ico-m" data-act="newDeal" title="New deal">${icon('plus')}<span class="hide-m">New deal</span></button>`;
+  document.getElementById('pactions').innerHTML = `<button class="btn" data-act="rates" title="Update today's rates"><span class="hide-m">Dubai</span> <b style="font-variant-numeric:tabular-nums">${rate(S.settings.dubaiQuote)}</b> <span class="muted small hide-m">${S.settings.rateLog.length ? fdt(S.settings.rateLog.at(-1).at) : ''}</span></button><button class="btn ico-m" data-act="newBatch" title="New batch">${icon('batches')}<span class="hide-m">New batch</span></button><button class="btn pri ico-m" data-act="newDeal" title="New deal">${icon('plus')}<span class="hide-m">New deal</span></button>`;
   const TB = [['dashboard', 'Home'], ['deals', 'Deals'], ['batches', 'Batches'], ['parties', 'Parties']];
   document.getElementById('tabbar').innerHTML = TB.map(([k, l]) => `<a href="#/${k}" class="${k === navKey ? 'on' : ''}">${icon(k)}<span>${l}</span>${cnt[k] ? `<span class="cnt">${cnt[k]}</span>` : ''}</a>`).join('') +
     `<button data-act="menu" class="${TB.some(([k]) => k === navKey) ? '' : 'on'}"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>More</span></button>`;
