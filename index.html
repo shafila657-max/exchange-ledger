@@ -176,6 +176,12 @@ dialog::backdrop{background:rgba(17,17,20,.4);backdrop-filter:blur(2px)}
 .mf{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border)}
 dialog[open]{display:flex;flex-direction:column}
 .mb{flex:1;min-height:0}
+table.stmt td,table.stmt th{font-variant-numeric:tabular-nums}
+table.stmt td.num{white-space:nowrap}
+table.stmt tr.open td{background:var(--surface-2)}
+table.stmt .acts{white-space:nowrap}
+table.stmt .acts .btn+.btn{margin-left:4px}
+table.stmt tfoot td{font-weight:650}
 dialog.wide{width:min(940px,calc(100vw - 32px))}
 .dealf{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
 .dealf>.alert{grid-column:1/-1;margin:0}
@@ -314,6 +320,17 @@ dialog.wide{width:min(940px,calc(100vw - 32px))}
   .tw table.deals td:nth-child(3){order:6}.tw table.deals td:nth-child(2){order:7}.tw table.deals td:nth-child(7){order:8}
   .tw table.deals td:nth-child(8){order:9}.tw table.deals td:nth-child(9){order:10;grid-column:span 2}
   .tw table.deals td:nth-child(1){padding-bottom:4px}
+  /* statement rows: date + balance on top, particulars, then qty/rate/credit/debit */
+  .tw table.stmt tr{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;padding:12px 14px}
+  .tw table.stmt td:empty{display:none}
+  .tw table.stmt tr.open{background:var(--surface-2)}
+  .tw table.stmt tr.open td{background:none}
+  .tw table.stmt td:nth-child(1){grid-column:1;grid-row:1;font-size:13px;color:var(--muted);font-weight:500}
+  .tw table.stmt td:nth-child(7){grid-column:2;grid-row:1;text-align:right}
+  .tw table.stmt td:nth-child(1)::before,.tw table.stmt td:nth-child(2)::before,.tw table.stmt td:nth-child(7)::before,.tw table.stmt td:nth-child(8)::before{display:none}
+  .tw table.stmt td:nth-child(2){grid-column:1/-1;font-size:14px}
+  .tw table.stmt td:nth-child(8){grid-column:1/-1;text-align:right}
+  .tw table.stmt tfoot td:nth-child(2){grid-column:1;grid-row:1}
   /* ledger rows: date + ref on top, description, then amount and running balance */
   .tw table.ledger tr{grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:12px 14px}
   .tw table.ledger td:nth-child(1){grid-column:1;border:none;padding:0;font-size:13px;color:var(--muted);font-weight:500}
@@ -353,6 +370,13 @@ dialog.wide{width:min(940px,calc(100vw - 32px))}
 /* ============================ helpers ============================ */
 const R2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const R6 = n => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
+const R3 = n => Math.round((n + Number.EPSILON) * 1000) / 1000;
+const nf3 = new Intl.NumberFormat('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3});
+const f3 = n => nf3.format(n);
+const drcr = n => `${f3(Math.abs(n))} ${n < -0.0005 ? 'Cr' : 'Dr'}`;
+const dmy = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '';
+// currency a party's opening balance is kept in
+const OPEN_CUR = {saudi_agent: 'SAR', saudi_collector: 'SAR', dubai_collector: 'SAR', dubai_agent: 'INR', distributor: 'INR', operator: 'INR'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => Math.random().toString(36).slice(2, 10);
 const nowISO = () => new Date().toISOString();
@@ -384,7 +408,7 @@ let S;
 // is charged SAR per ₹1,000 = Dubai quote + premium. Bigger deals get a smaller premium.
 const DEFAULT_SLABS = [{minInr: 0, premium: 2.00}, {minInr: 500000, premium: 1.80}, {minInr: 2000000, premium: 1.50}];
 function defaultSettings() {
-  return {dubaiQuote: 39.52, sarAedRate: 0.979, marketSarInrRate: 24.77, referenceSarInrRate: 24.77, referenceAedInrRate: 25.30, defaultDistributorFeeInr: 50,
+  return {saleNarration: 'By SALES A/C BANK ADD PASS', receiptNarration: 'To CASH RECVD', dubaiQuote: 36.5, sarAedRate: 0.979, marketSarInrRate: 24.77, referenceSarInrRate: 24.77, referenceAedInrRate: 25.30, defaultDistributorFeeInr: 50,
     slabs: DEFAULT_SLABS.map(x => ({...x})), rateLog: []};
 }
 const slabFor = (inr, slabs = S.settings.slabs) => [...slabs].sort((a, b) => b.minInr - a.minInr).find(x => inr >= x.minInr);
@@ -400,8 +424,8 @@ function slabLabel(sl) {
 const profitSar = c => c.effRate > 0 ? R2(c.net / c.effRate) : 0;
 const sarInr = (sar, inr) => `${money(sar, 'SAR')} <span class="muted small">≈ ${money(inr, 'INR')}</span>`;
 function emptyState() {
-  return {regions: [], parties: [], deals: [], batches: [], allocations: [],
-    capital: [], settings: defaultSettings(), counters: {deal: 0, batch: 0, capital: 0}};
+  return {regions: [], parties: [], deals: [], batches: [], allocations: [], receipts: [], narr: {},
+    capital: [], settings: defaultSettings(), counters: {deal: 0, batch: 0, capital: 0, receipt: 0}};
 }
 function load() { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
 function save() {} // prototype: nothing persists, refresh restores sample data
@@ -439,7 +463,7 @@ function allocateBatchYield(deals, inrYield) {
 
 const activeParts = l => (l || []).filter(x => !x.reversed);
 function recalcBatch(b) {
-  const cv = activeParts(b.conversions), st = activeParts(b.settlements), sum = (l, k) => R2(l.reduce((s, x) => s + x[k], 0));
+  const cv = activeParts(b.conversions), st = activeParts(b.settlements), sum = (l, k) => R3(l.reduce((s, x) => s + x[k], 0));
   b.sarConverted = sum(cv, 'sar'); b.aedAmount = cv.length ? sum(cv, 'aed') : undefined;
   b.sarToAedRate = cv.length ? R6(b.aedAmount / b.sarConverted) : undefined;
   b.aedSettled = sum(st, 'aed'); b.inrYield = st.length ? sum(st, 'inr') : undefined;
@@ -456,8 +480,15 @@ const A = {
   saveParty(f) {
     if (!f.name?.trim()) fail('Name is required');
     if (f.type === 'distributor' && !f.regionId) fail('Distributors need a region');
-    if (f.id) { Object.assign(party(f.id), {name: f.name.trim(), phone: f.phone, regionId: f.regionId || undefined, notes: f.notes, active: f.active}); return party(f.id); }
-    const p = {id: uid(), type: f.type, name: f.name.trim(), phone: f.phone || '', regionId: f.regionId || undefined, notes: f.notes || '', active: true};
+    const oa = f.openingAmount == null || f.openingAmount === '' ? 0 : num(f.openingAmount);
+    if (isNaN(oa) || oa < 0) fail('Opening balance must be 0 or more');
+    const opening = oa > 0 ? {amount: R3(f.openingSide === 'Cr' ? -oa : oa), date: f.openingDate || todayStr()} : undefined;
+    if (f.id) {
+      const x = party(f.id), was = x.opening ? drcr(x.opening.amount) + ' on ' + dmy(x.opening.date) : 'none', now = opening ? drcr(opening.amount) + ' on ' + dmy(opening.date) : 'none';
+      if (was !== now) (x.edits ??= []).push({at: nowISO(), what: 'Opening balance', from: was, to: now});
+      Object.assign(x, {name: f.name.trim(), phone: f.phone, regionId: f.regionId || undefined, notes: f.notes, active: f.active, opening}); return x;
+    }
+    const p = {id: uid(), type: f.type, name: f.name.trim(), phone: f.phone || '', regionId: f.regionId || undefined, notes: f.notes || '', active: true, opening};
     S.parties.push(p); return p;
   },
   addDeal(f, at = nowISO()) {
@@ -469,7 +500,7 @@ const A = {
     if (!(c > 0)) fail('Enter the SAR → AED rate');
     if (!(p > 0)) fail('Customer rate must be greater than 0');
     if (p > q * 1.3 || p < q * 0.9) fail('Customer rate ' + p + ' is far from the Dubai quote ' + q + ' — check for a typo');
-    const sl = slabFor(inr), sug = R4(q + (sl?.premium ?? 0)), sar = R2(inr / 1000 * p);
+    const sl = slabFor(inr), sug = R4(q + (sl?.premium ?? 0)), sar = R3(inr / 1000 * p);
     const r = 1000 / p, est = 1000 * c / q, override = Math.abs(R4(p) - sug) > 1e-6;
     if (!f.saudiAgentId) fail('Choose a Saudi customer');
     if (!f.recipientName?.trim()) fail('Recipient name is required');
@@ -481,7 +512,7 @@ const A = {
     if (dist && (isNaN(fee) || fee < 0)) fail('Delivery fee must be 0 or more');
     const n = ++S.counters.deal;
     const d = {id: uid(), dealNo: 'D-' + String(n).padStart(4, '0'), dealDate: f.dealDate || at.slice(0, 10),
-      saudiAgentId: f.saudiAgentId, sarAmount: R2(sar), dealRate: R6(r),
+      saudiAgentId: f.saudiAgentId, sarAmount: sar, dealRate: R6(r),
       dubaiQuote: R4(q), sarAedRate: R6(c), custRate: R4(p), premium: R4(p - q),
       marketRate: R6(est), slab: sl ? {minInr: sl.minInr, premium: sl.premium, label: slabLabel(sl)} : undefined,
       suggestedCustRate: sug, rateOverride: override,
@@ -524,7 +555,7 @@ const A = {
     const n = ++S.counters.batch;
     const b = {id: uid(), batchNo: 'B-' + String(n).padStart(4, '0'), createdOn: f.createdOn || at.slice(0, 10),
       saudiCollectorId: f.saudiCollectorId, dealIds: ids.slice(),
-      sarTotal: R2(ids.reduce((s, id) => s + deal(id).sarAmount, 0)), status: 'collected_saudi',
+      sarTotal: R3(ids.reduce((s, id) => s + deal(id).sarAmount, 0)), status: 'collected_saudi',
       history: [{status: 'collected_saudi', at, note: ids.length + ' deals pooled by ' + pname(f.saudiCollectorId)}], notes: f.notes || ''};
     ids.forEach(id => { deal(id).batchId = b.id; });
     S.batches.push(b); return b;
@@ -537,12 +568,12 @@ const A = {
   },
   batchConvert(id, f, at = nowISO()) {
     const b = batch(id); if (b.reversed || b.status !== 'in_transit') fail('Batch is not in transit');
-    const left = R2(b.sarTotal - (b.sarConverted || 0));
+    const left = R3(b.sarTotal - (b.sarConverted || 0));
     const sar = num(f.sar), r = num(f.rate);
     if (!(sar > 0)) fail('Enter the SAR amount converted in this part');
     if (sar > left + 0.004) fail('Only ' + money(left, 'SAR') + ' left to convert');
     if (!(r > 0)) fail('Enter the SAR → AED rate for this part');
-    (b.conversions ??= []).push({id: uid(), at, sar: R2(sar), rate: R6(r), aed: R2(sar * r), note: f.note || ''});
+    (b.conversions ??= []).push({id: uid(), at, sar: R3(sar), rate: R6(r), aed: R2(sar * r), note: f.note || ''});
     recalcBatch(b);
     b.history.push({status: 'in_transit', at, note: `Converted ${money(sar, 'SAR')} → ${money(R2(sar * r), 'AED')} @ ${rate(r)}`});
     if (b.sarTotal - b.sarConverted < 0.005) { b.status = 'converted_aed'; b.history.push({status: 'converted_aed', at, note: `All SAR converted in ${activeParts(b.conversions).length} part(s) · avg ${rate(b.sarToAedRate)}`}); }
@@ -613,6 +644,42 @@ const A = {
     if (new Set(rows.map(r => r.minInr)).size !== rows.length) fail('Two slabs have the same minimum');
     S.settings.slabs = rows.map(r => ({minInr: R2(r.minInr), premium: R4(r.premium)})).sort((a, b) => a.minInr - b.minInr);
   },
+  // cash received from a Saudi customer — credits their running account
+  addReceipt(f, at = nowISO()) {
+    const c = party(f.partyId); if (!c || c.type !== 'saudi_agent') fail('Choose a customer');
+    const amt = num(f.amount); if (!(amt > 0)) fail('Amount must be greater than 0');
+    if (!f.collectorId) fail('Choose who received the cash');
+    const n = ++S.counters.receipt;
+    const r = {id: uid(), no: 'R-' + String(n).padStart(4, '0'), partyId: c.id, collectorId: f.collectorId, amount: R3(amt),
+      date: (f.date || at.slice(0, 10)) + 'T09:00:00.000Z', narr: (f.narr || '').trim(), note: f.note || '', edits: [], createdAt: at};
+    S.receipts.push(r); return r;
+  },
+  editReceipt(id, f, at = nowISO()) {
+    const r = S.receipts.find(x => x.id === id); if (!r) fail('Entry not found');
+    if (r.voided) fail('This entry is voided');
+    if (!(f.reason || '').trim()) fail('Give a reason for the change');
+    const amt = num(f.amount); if (!(amt > 0)) fail('Amount must be greater than 0');
+    if (!f.collectorId) fail('Choose who received the cash');
+    const next = {amount: R3(amt), date: f.date + 'T09:00:00.000Z', collectorId: f.collectorId, narr: (f.narr || '').trim(), note: f.note || ''};
+    const changes = [];
+    if (next.amount !== r.amount) changes.push(`amount ${f3(r.amount)} → ${f3(next.amount)}`);
+    if (next.date.slice(0, 10) !== r.date.slice(0, 10)) changes.push(`date ${dmy(r.date)} → ${dmy(next.date)}`);
+    if (next.collectorId !== r.collectorId) changes.push(`received by ${pname(r.collectorId)} → ${pname(next.collectorId)}`);
+    if (next.narr !== r.narr) changes.push('particulars');
+    if (next.note !== r.note) changes.push('note');
+    if (!changes.length) fail('Nothing changed');
+    r.edits.push({at, changes, reason: f.reason.trim()}); Object.assign(r, next);
+  },
+  voidReceipt(id, reason, at = nowISO()) {
+    const r = S.receipts.find(x => x.id === id); if (!r) fail('Entry not found');
+    if (r.voided) fail('Already voided'); if (!reason) fail('Give a reason');
+    r.voided = {at, reason};
+  },
+  // particulars text on any ledger line can be reworded; amounts stay with their source
+  setNarration(key, text, at = nowISO()) {
+    text = (text || '').trim(); if (!text) fail('Particulars cannot be empty');
+    const prev = S.narr[key]; S.narr[key] = {text, at, prev: prev?.text};
+  },
   capitalEntry(f, at = nowISO()) {
     const amt = num(f.amount); if (!(amt > 0)) fail('Amount must be greater than 0');
     if (!['SAR', 'AED', 'INR'].includes(f.currency)) fail('Choose a currency');
@@ -632,11 +699,19 @@ const A = {
 /* ============================ ledger (derived) ============================ */
 function deriveLedger() {
   const E = [];
-  const add = (date, partyId, cur, amt, memo, ref, rev) => { if (partyId && Math.abs(amt) > 0.0001) E.push({date, partyId, cur, amt: R2(amt), memo, ref, rev: !!rev}); };
+  const add = (date, partyId, cur, amt, memo, ref, rev, x) => { if (partyId && Math.abs(amt) > 0.0001) E.push({date, partyId, cur, amt: R3(amt), memo, ref, rev: !!rev, ...x}); };
+  const st = S.settings;
+  for (const p of S.parties) if (p.opening) add(p.opening.date + 'T00:00:00.000Z', p.id, OPEN_CUR[p.type], p.opening.amount, 'Opening', {kind: 'opening', id: p.id, no: 'Opening'}, false, {opening: true});
+  for (const r of S.receipts) {
+    const ref = {kind: 'receipt', id: r.id, no: r.no};
+    add(r.date, r.partyId, 'SAR', -r.amount, r.narr || st.receiptNarration, ref, false, {sub: 'Received by ' + pname(r.collectorId)});
+    add(r.date, r.collectorId, 'SAR', r.amount, 'Cash received from ' + pname(r.partyId), ref);
+    if (r.voided) { add(r.voided.at, r.partyId, 'SAR', r.amount, 'Voided ' + r.no + ': ' + r.voided.reason, ref, true); add(r.voided.at, r.collectorId, 'SAR', -r.amount, 'Voided ' + r.no + ': ' + r.voided.reason, ref, true); }
+  }
   for (const d of S.deals) {
     const ref = {kind: 'deal', id: d.id, no: d.dealNo};
-    add(d.createdAt, d.saudiAgentId, 'SAR', d.sarAmount, 'Collected from customer for ' + d.recipientName, ref);
-    if (d.status === 'cancelled') add(d.history.at(-1).at, d.saudiAgentId, 'SAR', -d.sarAmount, 'Reversal: ' + d.cancelReason, ref, true);
+    add(d.createdAt, d.saudiAgentId, 'SAR', d.sarAmount, st.saleNarration, ref, false, {qty: R3(d.inrPayout / 1000), rate: d.custRate, sub: d.dealNo + ' · ' + d.recipientName});
+    if (d.status === 'cancelled') add(d.history.at(-1).at, d.saudiAgentId, 'SAR', -d.sarAmount, 'Reversal: ' + d.cancelReason, ref, true, {qty: -R3(d.inrPayout / 1000), rate: d.custRate, sub: d.dealNo + ' cancelled'});
     if (d.status === 'completed') {
       const at = d.history.find(h => h.status === 'completed').at;
       add(at, d.distributorId, 'INR', -d.inrPayout, 'Paid to recipient ' + d.recipientName, ref);
@@ -648,10 +723,6 @@ function deriveLedger() {
     const at = s => b.history.find(h => h.status === s)?.at;
     const L = [];
     const push = (...a) => L.push(a);
-    if (at('collected_saudi')) {
-      b.dealIds.forEach(id => { const d = deal(id); push(at('collected_saudi'), d.saudiAgentId, 'SAR', -d.sarAmount, 'Handed to collector (' + d.dealNo + ')'); });
-      push(at('collected_saudi'), b.saudiCollectorId, 'SAR', b.sarTotal, 'Pooled ' + b.dealIds.length + ' deals');
-    }
     if (at('in_transit')) {
       push(at('in_transit'), b.saudiCollectorId, 'SAR', -b.sarTotal, 'Handed to ' + pname(b.dubaiCollectorId));
       push(at('in_transit'), b.dubaiCollectorId, 'SAR', b.sarTotal, 'Received from ' + pname(b.saudiCollectorId));
@@ -679,11 +750,26 @@ function deriveLedger() {
     if (c.kind === 'withdraw') add(c.date, c.partyId, c.currency, -c.amount, 'Capital withdrawn by operator' + (c.note ? ' · ' + c.note : ''), ref);
     if (c.kind === 'transfer') { add(c.date, c.partyId, c.currency, -c.amount, 'Moved to ' + pname(c.toPartyId) + (c.note ? ' · ' + c.note : ''), ref); add(c.date, c.toPartyId, c.currency, c.amount, 'Operator funds from ' + pname(c.partyId) + (c.note ? ' · ' + c.note : ''), ref); }
   }
-  return E.sort((x, y) => x.date.localeCompare(y.date));
+  E.sort((x, y) => x.date.localeCompare(y.date));
+  // stable key per line so its particulars can be reworded
+  const seen = {};
+  for (const e of E) { const k = `${e.ref.kind}:${e.ref.id}:${e.partyId}:${e.cur}`; seen[k] = (seen[k] || 0) + 1; e.key = k + ':' + seen[k]; const n = S.narr[e.key]; if (n) { e.memo = n.text; e.reworded = true; } }
+  return E;
+}
+// a party's statement for one currency between two dates: opening carried forward, running balance, totals
+function statement(partyId, cur, from, to) {
+  const all = deriveLedger().filter(e => e.partyId === partyId && e.cur === cur), day = e => e.date.slice(0, 10);
+  let bf = 0; const inRange = [];
+  for (const e of all) { if (from && day(e) < from) bf = R3(bf + e.amt); else if (!to || day(e) <= to) inRange.push(e); }
+  const rows = []; let run = bf;
+  if (from && Math.abs(bf) > 0.0005) rows.push({opening: true, carried: true, date: from + 'T00:00:00.000Z', memo: 'Opening', amt: bf, bal: bf, ref: {kind: 'opening', id: partyId}});
+  for (const e of inRange) { run = R3(run + e.amt); rows.push({...e, bal: run}); }
+  const tot = {qty: R3(rows.reduce((s, e) => s + (e.qty || 0), 0)), debit: R3(rows.reduce((s, e) => s + (e.amt > 0 ? e.amt : 0), 0)), credit: R3(rows.reduce((s, e) => s + (e.amt < 0 ? -e.amt : 0), 0)), bal: run};
+  return {rows, tot};
 }
 function balances(E) {
   const m = {};
-  for (const e of E) { m[e.partyId] ??= {SAR: 0, AED: 0, INR: 0}; m[e.partyId][e.cur] = R2(m[e.partyId][e.cur] + e.amt); }
+  for (const e of E) { m[e.partyId] ??= {SAR: 0, AED: 0, INR: 0}; m[e.partyId][e.cur] = R3(m[e.partyId][e.cur] + e.amt); }
   return m;
 }
 const BAL_LABEL = {saudi_agent: ['SAR', 'SAR due from customer'], saudi_collector: ['SAR', 'SAR in custody'], dubai_collector: ['SAR/AED', 'In custody'], dubai_agent: ['INR', 'INR due to India'], distributor: ['INR', 'Cash held'], operator: ['INR', 'Cash held']};
@@ -695,7 +781,9 @@ function seed() {
   const [ker, mum, che] = ['Kerala', 'Mumbai', 'Chennai'].map(n => A.addRegion(n));
   const P = (type, name, phone, regionId) => A.saveParty({type, name, phone, regionId});
   const ag = [P('saudi_agent', 'Abdul Rahman (Riyadh)', '+966 50 000 0101'), P('saudi_agent', 'Yusuf (Jeddah)', '+966 50 000 0102'),
-    P('saudi_agent', 'Naseer (Dammam)', '+966 50 000 0103'), P('saudi_agent', 'Haris (Riyadh)', '+966 50 000 0104'), P('saudi_agent', 'Salim (Makkah)', '+966 50 000 0105')];
+    P('saudi_agent', 'Naseer (Dammam)', '+966 50 000 0103'), P('saudi_agent', 'Haris (Riyadh)', '+966 50 000 0104'), P('saudi_agent', 'Salim (Makkah)', '+966 50 000 0105'),
+    // a real customer account, as kept in the operator's books
+    A.saveParty({type: 'saudi_agent', name: 'Rayees', phone: '+966 50 000 0106', openingAmount: 14595.395, openingSide: 'Dr', openingDate: '2026-10-30'})];
   const sc = P('saudi_collector', 'Faisal – Saudi Collector', '+966 55 000 0201');
   const dc = P('dubai_collector', 'Ashraf – Dubai Collector', '+971 50 000 0301');
   const op = P('operator', 'Operator – Own Cash', '');
@@ -706,16 +794,17 @@ function seed() {
   const dch = P('distributor', 'Chennai Distributor', '+91 90000 00503', che.id);
   A.capitalEntry({kind: 'transfer', amount: 500000, currency: 'INR', partyId: op.id, toPartyId: dk.id, date: '2026-11-01', note: 'Float advance for Kerala payouts'}, t(1, 9));
   const distFor = {[ker.id]: dk, [mum.id]: dm, [che.id]: dch};
-  // the Dubai quote moves through the month; operator updates it a few times a day
-  // Dubai agent's quote in AED per ₹1,000 — moves through the month
-  const DQ = {2: 39.58, 3: 39.52, 4: 39.45, 10: 39.55, 11: 39.40, 12: 39.33, 15: 39.42, 16: 39.52, 17: 39.48, 18: 39.52};
+  // Dubai agent's quote in AED per ₹1,000 — moves through the month; operator updates it a few times a day
+  const DQ = {2: 36.45, 3: 36.39, 4: 36.42, 10: 36.55, 11: 36.60, 12: 36.52, 15: 36.48, 16: 36.50, 17: 36.46, 18: 36.50};
+  const RC = (a, date, amount) => A.addReceipt({partyId: ag[a].id, collectorId: sc.id, date, amount}, date + 'T09:00:00.000Z');
+  RC(5, '2026-10-31', 7500); RC(5, '2026-11-02', 3500);
   Object.entries(DQ).forEach(([day, q]) => A.setRates({dubaiQuote: q, sarAedRate: 0.979, note: +day === 18 ? 'Morning update' : ''}, t(+day, 5)));
   // D(day, agent, ₹ thousands to deliver, recipient, address, region, overridePremium?)
-  const D = (day, a, k, name, addr, reg, overridePremium) => {
+  const D = (day, a, k, name, addr, reg, overridePremium, hour) => {
     const q = DQ[day];
     return A.addDeal({dealDate: t(day, 6).slice(0, 10), saudiAgentId: ag[a].id, inrK: k, dubaiQuote: q, sarAedRate: 0.979,
       custRate: overridePremium != null ? R4(q + overridePremium) : suggestCustRate(k * 1000, q), recipientName: name, recipientPhone: '+91 90000 1' + String(S.counters.deal + 1).padStart(4, '0'),
-      recipientAddress: addr, regionId: reg.id}, t(day, 6 + (S.counters.deal % 8)));
+      recipientAddress: addr, regionId: reg.id}, t(day, hour ?? 6 + (S.counters.deal % 8)));
   };
   const b1 = [
     D(2, 0, 24, 'Anwar K', 'Nadakkavu, Kozhikode', ker),
@@ -724,12 +813,18 @@ function seed() {
     D(3, 3, 19, 'Lakshmi R', 'T. Nagar, Chennai', che),
     D(4, 0, 2500, 'Shameer V (bulk)', 'Tirur, Malappuram', ker),
   ];
+  // Rayees' bank-transfer deals on 3 Nov, ₹ in thousands at 38.39 SAR per ₹1,000
+  const RN = ['Ashraf M', 'Basheer K', 'Chamila T', 'Dilshad P', 'Ebrahim V', 'Faisal N', 'Ganesh R', 'Hamza C', 'Irfan K', 'Jabir T', 'Kabeer A', 'Latheef P', 'Mansoor V', 'Noufal K'];
+  [25, 32, 22, 55, 44, 55, 7, 67, 15.5, 10, 25, 38, 25, 15].forEach((k, i) => b1.push(D(3, 5, k, RN[i], 'Malappuram', ker, null, 14)));
+  RC(5, '2026-11-04', 8000);
+  for (const a of [0, 1, 2, 3]) { const due = b1.filter(d => d.saudiAgentId === ag[a].id).reduce((s, d) => s + d.sarAmount, 0); if (due) RC(a, '2026-11-05', Math.floor(due / 50) * 50); }
+  RC(5, '2026-11-05', 3000); RC(5, '2026-11-07', 3000);
   const B1 = A.createBatch({saudiCollectorId: sc.id, dealIds: b1.map(d => d.id), createdOn: '2026-11-05'}, t(5, 9));
   A.batchTransit(B1.id, dc.id, t(6, 10));
   A.batchConvert(B1.id, {sar: 80000, rate: 0.9790, note: 'Morning exchange'}, t(6, 15));
-  A.batchSettle(B1.id, {dubaiAgentId: da.id, aed: 50000, rate: 25.32, marketRate: 25.48}, t(7, 8));
-  A.batchConvert(B1.id, {sar: R2(B1.sarTotal - B1.sarConverted), rate: 0.9784, note: 'Rate dipped'}, t(7, 11));
-  A.batchSettle(B1.id, {aed: R2(B1.aedAmount - B1.aedSettled), rate: 25.28, marketRate: 25.45}, t(8, 12));
+  A.batchSettle(B1.id, {dubaiAgentId: da.id, aed: 50000, rate: 27.47, marketRate: 27.62}, t(7, 8));
+  A.batchConvert(B1.id, {sar: R3(B1.sarTotal - B1.sarConverted), rate: 0.9784, note: 'Rate dipped'}, t(7, 11));
+  A.batchSettle(B1.id, {aed: R2(B1.aedAmount - B1.aedSettled), rate: 27.45, marketRate: 27.60}, t(8, 12));
   b1.forEach(d => A.assignDistributor(d.id, distFor[d.regionId].id, d.sarAmount >= 50000 ? 500 : 50, t(8, 13)));
   for (const dist of [dk, dm, dch]) {
     const amt = b1.filter(d => d.distributorId === dist.id).reduce((s, d) => s + d.inrPayout + d.distributorFeeInr, 0);
@@ -737,16 +832,19 @@ function seed() {
   }
   [0, 1, 2, 3].forEach(i => { A.advanceDeal(b1[i].id, t(9, 9)); A.advanceDeal(b1[i].id, t(9 + i % 2, 15)); });
   A.advanceDeal(b1[4].id, t(10, 9));
+  b1.slice(5).forEach(d => { A.advanceDeal(d.id, t(9, 10)); A.advanceDeal(d.id, t(9, 16)); });
   const b2 = [
     D(10, 1, 48, 'Jaseela M', 'Kondotty, Malappuram', ker),
     D(11, 4, 1480, 'Priya N (bulk)', 'Dadar West, Mumbai', mum, 1.60),
     D(11, 2, 95, 'Muneer T', 'Vadakara, Kozhikode', ker),
     D(12, 3, 22, 'Karthik V', 'Velachery, Chennai', che),
+    D(11, 5, 21, 'Rasheed P', 'Manjeri', ker, null, 15), D(11, 5, 75, 'Sameer K', 'Kottakkal', ker, null, 15), D(11, 5, 5, 'Thahir M', 'Tirur', ker, null, 15),
   ];
+  for (const a of [1, 2, 3, 4]) { const due = b2.filter(d => d.saudiAgentId === ag[a].id).reduce((s, d) => s + d.sarAmount, 0); if (due) RC(a, '2026-11-13', Math.floor(due / 50) * 50); }
   const B2 = A.createBatch({saudiCollectorId: sc.id, dealIds: b2.map(d => d.id), createdOn: '2026-11-13'}, t(13, 9));
   A.batchTransit(B2.id, dc.id, t(14, 10));
   A.batchConvert(B2.id, {sar: 40000, rate: 0.9792}, t(15, 11));
-  A.batchSettle(B2.id, {dubaiAgentId: da.id, aed: 20000, rate: 25.35, marketRate: 25.50, note: 'First part'}, t(16, 12));
+  A.batchSettle(B2.id, {dubaiAgentId: da.id, aed: 20000, rate: 27.40, marketRate: 27.55, note: 'First part'}, t(16, 12));
   A.assignDistributor(b2[0].id, dk.id, 50, t(14, 12));
   D(15, 0, 43, 'Sajid A', 'Perinthalmanna', ker);
   const cx = D(16, 3, 14, 'Imran Q', 'Kurla, Mumbai', mum);
@@ -757,7 +855,7 @@ function seed() {
 }
 
 /* ============================ UI infra ============================ */
-const UI = {deals: {q: '', status: '', agent: '', region: '', dist: '', from: '', to: ''}, partyTab: 'saudi_agent',
+const UI = {deals: {q: '', status: '', agent: '', region: '', dist: '', from: '', to: ''}, partyTab: 'saudi_agent', ledger: {id: '', from: '', to: ''},
   report: {from: '2026-11-01', to: todayStr(), group: 'agent'}};
 function toast(msg, err) {
   const t = document.getElementById('toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
@@ -1117,21 +1215,42 @@ function pageParties() {
 
 function pageParty(id) {
   const p = party(id); if (!p) return notFound();
-  const E = deriveLedger().filter(e => e.partyId === id);
-  const curs = ['SAR', 'AED', 'INR'].filter(c => E.some(e => e.cur === c));
+  if (UI.ledger.id !== id) UI.ledger = {id, from: '', to: ''};
+  const L = UI.ledger;
+  const curs = ['SAR', 'AED', 'INR'].filter(c => deriveLedger().some(e => e.partyId === id && e.cur === c));
+  const refLink = e => e.ref.kind === 'deal' ? `<a href="#/deal/${e.ref.id}">${esc(e.sub || e.ref.no)}</a>` : e.ref.kind === 'batch' ? `<a href="#/batch/${e.ref.id}">${e.ref.no}</a>` : e.ref.kind === 'capital' ? `<a href="#/capital">${e.ref.no}</a>` : e.ref.kind === 'receipt' ? `${e.ref.no}${e.sub ? ' · ' + esc(e.sub) : ''}` : '';
   const ledgers = curs.map(c => {
-    let run = 0;
-    const rows = E.filter(e => e.cur === c).map(e => { run = R2(run + e.amt);
-      const link = e.ref.kind === 'deal' ? `<a href="#/deal/${e.ref.id}">${e.ref.no}</a>` : e.ref.kind === 'capital' ? `<a href="#/capital">${e.ref.no}</a>` : `<a href="#/batch/${e.ref.id}">${e.ref.no}</a>`;
-      return `<tr class="${e.rev ? 'dim' : ''}"><td>${fdt(e.date)}</td><td>${link}</td><td>${esc(e.memo)}</td><td class="num">${e.amt > 0 ? money(e.amt, c) : ''}</td><td class="num">${e.amt < 0 ? money(-e.amt, c) : ''}</td><td class="num"><b>${money(run, c)}</b></td></tr>`; });
-    return `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${c} ledger</h2><span>Balance <b>${signed(run, c)}</b></span></div>
-      <div class="tw" style="margin-top:10px"><table class="ledger"><thead><tr><th>Date</th><th>Ref</th><th>Description</th><th class="num">In (+)</th><th class="num">Out (−)</th><th class="num">Balance</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
+    const {rows, tot} = statement(id, c, L.from, L.to);
+    const body = rows.map(e => {
+      const rc = e.ref.kind === 'receipt' ? S.receipts.find(x => x.id === e.ref.id) : null;
+      const edited = e.reworded || (rc && rc.edits.length && !e.rev);
+      const hist = rc ? rc.edits.map(x => `${fdt(x.at)}: ${x.changes.join(', ')} — ${x.reason}`).join('\n') : '';
+      let act = '';
+      if (e.carried) act = '';
+      else if (e.opening) act = `<button class="btn sm" data-act="editParty" data-id="${p.id}" title="Edit opening balance">Edit</button>`;
+      else if (rc && !e.rev && !rc.voided) act = `<button class="btn sm" data-act="receipt" data-id="${rc.id}">Edit</button><button class="btn sm dan" data-act="voidReceipt" data-id="${rc.id}">Void</button>`;
+      else if (!e.rev) act = `<button class="btn sm" data-act="narr" data-key="${e.key}" data-text="${esc(e.memo)}" title="Reword particulars">Edit</button>`;
+      if (e.ref.kind === 'deal' && !e.rev) { const d = deal(e.ref.id); if (!d.batchId && !['completed', 'cancelled'].includes(d.status)) act += `<button class="btn sm" data-act="reverseDeal" data-id="${d.id}" title="Correct qty or rate">Correct</button>`; }
+      return `<tr class="${e.rev || rc?.voided ? 'dim' : ''}${e.opening ? ' open' : ''}"><td>${e.opening ? '' : dmy(e.date)}</td>
+        <td>${esc(e.memo)}${edited ? ` <span class="badge" title="${esc(hist || 'Particulars reworded')}">edited</span>` : ''}${rc?.voided && !e.rev ? ' <span class="badge b-red">voided</span>' : ''}${refLink(e) ? `<div class="small muted">${refLink(e)}</div>` : ''}</td>
+        <td class="num">${e.qty ? f3(e.qty) : ''}</td><td class="num">${e.rate ? f3(e.rate) : ''}</td>
+        <td class="num">${e.amt < 0 ? f3(-e.amt) : ''}</td><td class="num">${e.amt > 0 ? f3(e.amt) : ''}</td>
+        <td class="num"><b>${drcr(e.bal)}</b></td><td class="num acts">${act}</td></tr>`; }).join('');
+    return `<div class="card"><div class="cardh"><h2>${c} ledger</h2><span>Balance <b class="${tot.bal > 0.0005 ? 'pos' : tot.bal < -0.0005 ? 'neg' : ''}">${c} ${drcr(tot.bal)}</b></span></div>
+      <div class="tw"><table class="stmt"><thead><tr><th>Date</th><th>Particulars</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Credit</th><th class="num">Debit</th><th class="num">Balance</th><th></th></tr></thead>
+      <tbody>${body || '<tr><td colspan="8" class="empty">No entries in this period</td></tr>'}</tbody>
+      <tfoot><tr><td></td><td>Total</td><td class="num">${tot.qty ? f3(tot.qty) : ''}</td><td></td><td class="num">${f3(tot.credit)}</td><td class="num">${f3(tot.debit)}</td><td class="num">${drcr(tot.bal)}</td><td></td></tr></tfoot></table></div>
+      <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn sm" data-act="ledgerCsv" data-id="${id}" data-cur="${c}">Export Excel (CSV)</button><button class="btn sm pri" data-act="ledgerPdf" data-id="${id}" data-cur="${c}">Export PDF</button></div></div>`;
   }).join('');
+  const filt = `<div class="filters" style="align-items:end"><label class="f">From<input type="date" data-filter="ledger.from" value="${L.from}"></label><label class="f">To<input type="date" data-filter="ledger.to" value="${L.to}"></label>
+    ${p.type === 'saudi_agent' ? `<button class="btn pri" data-act="receipt" data-party="${p.id}" style="flex:0 0 auto">+ Cash received</button>` : ''}</div>`;
+  const pe = (p.edits || []).length ? `<div class="small muted" style="margin-top:6px">${p.edits.map(x => `${fdt(x.at)} · ${x.what}: ${esc(x.from)} → ${esc(x.to)}`).join('<br>')}</div>` : '';
   const myDeals = p.type === 'saudi_agent' ? S.deals.filter(d => d.saudiAgentId === id) : p.type === 'distributor' ? S.deals.filter(d => d.distributorId === id) : [];
   return `
   <div class="crumb"><a href="#/parties" data-act="partyTab" data-tab="${p.type}">Parties</a> / ${esc(p.name)}</div>
   <div class="head"><div><h1>${esc(p.name)}</h1><div class="row small muted" style="margin-top:4px"><span class="badge">${PT1[p.type]}</span>${esc(p.phone)}${p.regionId ? ' · ' + esc(rname(p.regionId)) : ''}${p.notes ? ' · ' + esc(p.notes) : ''}</div></div>
     <button class="btn" data-act="editParty" data-id="${p.id}">Edit</button></div>
+  ${filt}${pe}
   ${ledgers || '<div class="card empty">No transactions yet</div>'}
   ${myDeals.length ? `<div class="card"><h2>${p.type === 'saudi_agent' ? 'Deals booked' : 'Payouts assigned'}</h2>${dealTable(myDeals, true)}</div>` : ''}`;
 }
@@ -1408,6 +1527,27 @@ const LIVE = {
   },
 };
 
+/* ============================ files ============================ */
+const fileBase = (p, c) => `${p.name.replace(/[^\w]+/g, '_').replace(/^_|_$/g, '')}_${c}_ledger${UI.ledger.from ? '_' + UI.ledger.from : ''}${UI.ledger.to ? '_to_' + UI.ledger.to : ''}`;
+async function saveFile(filename, data, label) {
+  // On claude.ai the viewer saves through the downloads capability; elsewhere, a normal browser download.
+  const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
+  if (dl) {
+    try { await dl.save({filename, data}); toast(label + ' saved'); }
+    catch (e) { if (e?.code === 'rate_limited') toast('A save prompt is already open', true); else if (e?.code !== 'declined') toast('Downloads are not available in this view', true); }
+    return;
+  }
+  const blob = data instanceof Blob ? data : new Blob([data], {type: 'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast(label + ' downloaded');
+}
+const loadScript = src => new Promise((ok, bad) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => bad(new Error('load failed')); document.head.appendChild(el); });
+async function loadPdf() {
+  if (!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  if (!window.jspdf.jsPDF.API.autoTable) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+  return window.jspdf.jsPDF;
+}
+
 /* ============================ events ============================ */
 const ACT = {
   menu() { document.body.classList.toggle('menu-open'); },
@@ -1486,9 +1626,59 @@ const ACT = {
       <label class="f">Name<input name="name" value="${esc(p.name)}" required></label>
       <label class="f">Phone<input name="phone" value="${esc(p.phone)}"></label>
       ${p.type === 'distributor' ? `<label class="f">Region<select name="regionId">${opts(S.regions, p.regionId, 'Choose region')}</select></label>` : ''}
+      <label class="f">Opening balance (${OPEN_CUR[p.type]})<input name="openingAmount" type="number" step="any" min="0" inputmode="decimal" value="${p.opening ? Math.abs(p.opening.amount) : ''}" placeholder="0"></label>
+      <div class="row" style="align-items:end;flex-wrap:nowrap"><label class="f" style="flex:1">Side<select name="openingSide"><option value="Dr" ${!p.opening || p.opening.amount >= 0 ? 'selected' : ''}>Dr · owes you</option><option value="Cr" ${p.opening?.amount < 0 ? 'selected' : ''}>Cr · you owe</option></select></label>
+        <label class="f" style="flex:1">As on<input name="openingDate" type="date" value="${p.opening?.date || todayStr()}"></label></div>
       <label class="f full">Notes<textarea name="notes">${esc(p.notes || '')}</textarea></label>
       ${p.id ? `<label class="row small"><input type="checkbox" name="active" ${p.active ? 'checked' : ''} style="width:auto"> Active</label>` : ''}</div></form>`,
       `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="partyForm">Save</button>`);
+  },
+  receipt(el) {
+    const r = el.dataset.id ? S.receipts.find(x => x.id === el.dataset.id) : null, pid = r ? r.partyId : el.dataset.party;
+    const cols = partiesOf('saudi_collector');
+    openModal((r ? 'Edit ' + r.no : 'Cash received') + ' · ' + esc(pname(pid)), `<form data-form="receipt" id="receiptForm"><input type="hidden" name="id" value="${r?.id || ''}"><input type="hidden" name="partyId" value="${pid}"><div class="fg">
+      <label class="f">Date<input name="date" type="date" value="${r ? r.date.slice(0, 10) : todayStr()}" required></label>
+      <label class="f">Amount (SAR)<input name="amount" type="number" step="any" min="0" inputmode="decimal" value="${r?.amount ?? ''}" required></label>
+      <label class="f">Received by<select name="collectorId" required>${opts(cols, r?.collectorId || cols[0]?.id)}</select></label>
+      <label class="f">Particulars<input name="narr" value="${esc(r?.narr || '')}" placeholder="${esc(S.settings.receiptNarration)}"></label>
+      <label class="f full">Note<input name="note" value="${esc(r?.note || '')}" placeholder="optional"></label>
+      ${r ? '<label class="f full">Reason for change<input name="reason" required placeholder="Kept in the edit history"></label>' : ''}</div></form>`,
+      `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="receiptForm">${r ? 'Save changes' : 'Save'}</button>`);
+  },
+  voidReceipt(el) { ask('Void this cash entry', 'The entry stays on the ledger, struck out, with a reversing line.', {reason: true, danger: true, ok: 'Void entry'}, reason => run(() => A.voidReceipt(el.dataset.id, reason), 'Entry voided')); },
+  narr(el) {
+    openModal('Edit particulars', `<form data-form="narr" id="narrForm"><input type="hidden" name="key" value="${esc(el.dataset.key)}"><div class="fg">
+      <label class="f full">Particulars<input name="text" value="${esc(el.dataset.text)}" required></label>
+      <div class="full small muted">Only the wording changes. Amounts, qty and rate come from the deal or batch, which stay locked; correct those at the source.</div></div></form>`,
+      `<button class="btn" data-act="closeModal">Cancel</button><button class="btn pri" form="narrForm">Save</button>`);
+  },
+  ledgerCsv(el) {
+    const p = party(el.dataset.id), c = el.dataset.cur, L = UI.ledger, {rows, tot} = statement(p.id, c, L.from, L.to);
+    const out = [[`${p.name} · ${c} ledger${L.from || L.to ? ` · ${dmy(L.from) || 'start'} to ${dmy(L.to) || 'today'}` : ''}`], ['DATE', 'PARTICULARS', 'QTY', 'RATE', 'CREDIT', 'DEBIT', 'BALANCE', 'Dr/Cr'],
+      ...rows.map(e => [e.opening ? '' : dmy(e.date), e.memo, e.qty ? e.qty.toFixed(3) : '', e.rate ? e.rate.toFixed(3) : '', e.amt < 0 ? (-e.amt).toFixed(3) : '', e.amt > 0 ? e.amt.toFixed(3) : '', Math.abs(e.bal).toFixed(3), e.bal < -0.0005 ? 'Cr' : 'Dr']),
+      ['', 'Total', tot.qty ? tot.qty.toFixed(3) : '', '', tot.credit.toFixed(3), tot.debit.toFixed(3), Math.abs(tot.bal).toFixed(3), tot.bal < -0.0005 ? 'Cr' : 'Dr']];
+    saveFile(fileBase(p, c) + '.csv', '﻿' + out.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n'), 'Excel file');
+  },
+  async ledgerPdf(el) {
+    const p = party(el.dataset.id), c = el.dataset.cur, L = UI.ledger, {rows, tot} = statement(p.id, c, L.from, L.to);
+    let jsPDF; try { jsPDF = await loadPdf(); } catch (e) { toast('Could not load the PDF maker. Check the internet connection.', true); return; }
+    const doc = new jsPDF({unit: 'mm', format: 'a4'}), P = [128, 0, 128];
+    const title = `${p.name}  ·  ${c} Ledger${L.from || L.to ? `  ·  ${dmy(L.from) || 'start'} to ${dmy(L.to) || dmy(todayStr())}` : ''}`;
+    doc.autoTable({
+      startY: 12, theme: 'grid', margin: {left: 10, right: 10, bottom: 18},
+      head: [[{content: title, colSpan: 7, styles: {halign: 'center', fontStyle: 'bold', fontSize: 10, cellPadding: 3}}], ['DATE', 'PARTICULARS', 'QTY', 'RATE', 'CREDIT', 'DEBIT', 'BALANCE']],
+      body: rows.map(e => [e.opening ? '' : dmy(e.date), e.memo, e.qty ? e.qty.toFixed(3) : '', e.rate ? e.rate.toFixed(3) : '', e.amt < 0 ? (-e.amt).toFixed(3) : '', e.amt > 0 ? e.amt.toFixed(3) : '', Math.abs(e.bal).toFixed(3) + (e.bal < -0.0005 ? ' Cr' : ' Dr')]),
+      foot: [['', 'T o t a l', tot.qty ? tot.qty.toFixed(3) : '', '', tot.credit.toFixed(3), tot.debit.toFixed(3), Math.abs(tot.bal).toFixed(3) + (tot.bal < -0.0005 ? ' Cr' : ' Dr')]],
+      showFoot: 'lastPage', showHead: 'everyPage',
+      styles: {font: 'times', fontSize: 8.5, textColor: 20, lineColor: P, lineWidth: 0.25, cellPadding: 1.6, valign: 'middle'},
+      headStyles: {fillColor: [255, 255, 255], textColor: 20, fontStyle: 'normal', halign: 'center'},
+      footStyles: {fillColor: [255, 255, 255], textColor: 20, fontStyle: 'normal', halign: 'right'},
+      columnStyles: {0: {cellWidth: 19, fontSize: 7.5}, 1: {cellWidth: 'auto'}, 2: {cellWidth: 19, halign: 'right'}, 3: {cellWidth: 16, halign: 'right'}, 4: {cellWidth: 22, halign: 'right'}, 5: {cellWidth: 22, halign: 'right'}, 6: {cellWidth: 27, halign: 'right'}},
+      didParseCell: h => { if (h.section === 'foot' && h.column.index === 1) h.cell.styles.halign = 'left'; },
+    });
+    const n = doc.getNumberOfPages();
+    for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('times', 'normal'); doc.setFontSize(9); doc.setTextColor(20); doc.text(`Page ${i} of ${n}`, 105, 289, {align: 'center'}); }
+    saveFile(fileBase(p, c) + '.pdf', doc.output('blob'), 'PDF');
   },
   partyTab(el, e) { e.preventDefault(); UI.partyTab = el.dataset.tab; if (location.hash !== '#/parties') location.hash = '#/parties'; else render(); },
   clearDealFilters() { UI.deals = {q: '', status: '', agent: '', region: '', dist: '', from: '', to: ''}; render(); },
@@ -1498,17 +1688,7 @@ const ACT = {
     const head = ['Deal', 'Date', 'Saudi customer', 'Recipient', 'Region', 'SAR', 'Dubai quote (AED/₹1000)', 'Slab', 'Override', 'Premium', 'Customer rate (SAR/₹1000)', 'INR payout', 'Effective rate', 'INR Dubai yield', 'Fee', 'Net profit INR', 'Net profit SAR', 'Profit basis', 'Batch', 'Distributor', 'Status'];
     const rows = ds.map(d => { const c = dealCalc(d); return [d.dealNo, d.dealDate, pname(d.saudiAgentId), d.recipientName, rname(d.regionId), d.sarAmount, d.dubaiQuote, d.slab?.label || '', d.rateOverride ? 'yes' : '', d.premium, d.custRate, d.inrPayout, c.effRate, c.yieldInr, c.fee, d.status === 'cancelled' ? '' : c.net, d.status === 'cancelled' ? '' : profitSar(c), c.settled ? 'actual' : 'estimated', d.batchId ? batch(d.batchId).batchNo : '', d.distributorId ? pname(d.distributorId) : '', DS[d.status][0]]; });
     const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-    const filename = `deals_${r.from || 'all'}_${r.to || 'all'}.csv`;
-    (async () => {
-      // On claude.ai the viewer saves through the downloads capability; opened as a local file, fall back to a normal download.
-      const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
-      if (dl) {
-        try { await dl.save({filename, data: csv}); toast('CSV saved'); }
-        catch (e) { if (e?.code === 'rate_limited') toast('A save prompt is already open', true); else if (e?.code !== 'declined') toast('Downloads are not available in this view', true); }
-        return;
-      }
-      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'})); a.download = filename; a.click();
-    })();
+    saveFile(`deals_${r.from || 'all'}_${r.to || 'all'}.csv`, csv, 'CSV');
   },
 };
 const FORMS = {
@@ -1529,6 +1709,8 @@ const FORMS = {
   rates(v) { run(() => A.setRates(v), "Today's rates updated"); },
   slabs(v, f) { run(() => A.saveSlabs([...f.querySelectorAll('[data-slab]')].map(r => ({minInr: num(r.querySelector('[name=minInr]').value), premium: num(r.querySelector('[name=premium]').value)}))), 'Rate slabs saved'); },
   capital(v) { run(() => A.capitalEntry(v), 'Capital entry saved'); },
+  receipt(v) { run(() => v.id ? A.editReceipt(v.id, v) : A.addReceipt(v), v.id ? 'Entry updated · change logged' : 'Cash received recorded'); },
+  narr(v) { run(() => A.setNarration(v.key, v.text), 'Particulars updated'); },
   region(v) { run(() => A.addRegion(v.name || ''), 'Region added'); },
   ask(v) { const cb = ASK_CB; ASK_CB = null; if (cb) cb((v.reason || '').trim()); },
   globalSearch(v) { UI.deals = {q: (v.q || '').trim(), status: '', agent: '', region: '', dist: '', from: '', to: ''}; document.getElementById('gsearch').value = ''; if (location.hash !== '#/deals') location.hash = '#/deals'; else render(); },
