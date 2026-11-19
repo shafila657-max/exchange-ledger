@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Exchange Ledger Prototype</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;550;600;650;700&display=swap" rel="stylesheet">
@@ -182,25 +182,137 @@ dialog::backdrop{background:rgba(17,17,20,.4);backdrop-filter:blur(2px)}
 #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:550;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50;max-width:calc(100vw - 32px)}
 #toast.show{opacity:1}
 #toast.err{background:var(--danger);color:#fff}
+.mbtn,.tabbar,.scrim{display:none}
 @media (max-width:1240px){.strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* ---------- tablet & phone: drawer navigation ---------- */
 @media (max-width:960px){
-  .app{flex-direction:column}
-  .side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border);padding:12px 16px}
-  .brandrow{padding-bottom:10px}
-  .search,.navsec,.sidefoot{display:none}
-  .nav{display:flex;gap:4px;overflow-x:auto}
-  .nav a{white-space:nowrap;margin:0}
+  .side{position:fixed;top:0;left:0;bottom:0;z-index:40;width:min(300px,86vw);height:100%;transform:translateX(-105%);transition:transform .22s ease;box-shadow:0 0 40px rgba(0,0,0,.25);padding-top:calc(20px + env(safe-area-inset-top))}
+  body.menu-open .side{transform:none}
+  .scrim{display:block;position:fixed;inset:0;z-index:39;background:rgba(10,10,14,.45);opacity:0;pointer-events:none;transition:opacity .2s}
+  body.menu-open .scrim{opacity:1;pointer-events:auto}
+  body.menu-open{overflow:hidden}
   .nav a.on::before{display:none}
-  .topbar{padding:12px 16px}
+  .mbtn{display:inline-grid;place-items:center;width:38px;height:38px;padding:0;border-radius:10px;flex:none}
+  .topbar{padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top))}
+  .topbar .tl{display:flex;align-items:center;gap:10px;min-width:0}
   .topbar .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #pactions [data-act=newBatch]{display:none}
-  .content{padding:16px 16px 64px}
+  .content{padding:18px 16px 64px}
   .g2,.g3{grid-template-columns:1fr}
   .chain{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tw{margin:0 -16px;padding:0 16px}
-  .card{padding:16px}
+  .card{padding:16px;border-radius:14px;margin-bottom:14px}
+  .grid{gap:14px}
 }
-@media (max-width:520px){.strip{grid-template-columns:1fr}.fg{grid-template-columns:1fr}.chain{grid-template-columns:1fr}.bigvals .bv{border-right:none;padding-right:0}}
+/* ---------- phone ---------- */
+@media (max-width:760px){
+  body{font-size:14px}
+  input,select,textarea{font-size:16px;padding:10px 12px}            /* stops iOS zoom on focus */
+  .btn{padding:9px 13px}
+  .btn.sm{padding:7px 11px}
+  /* top bar: title + compact actions */
+  .topbar .t{font-size:15px}
+  #pactions{gap:6px;flex-wrap:nowrap}
+  #pactions .hide-m{display:none}
+  #pactions .btn{padding:0 11px;height:38px}
+  #pactions .ico-m{width:38px;padding:0;justify-content:center}
+  /* bottom tab bar */
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:30;background:color-mix(in srgb,var(--side) 92%,transparent);backdrop-filter:blur(10px);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .tabbar a,.tabbar button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;margin:0;padding:5px 0;line-height:1.2;color:var(--muted);font:500 10.5px/1.2 inherit;background:none;border:none;cursor:pointer;text-decoration:none}
+  .tabbar svg.i{width:21px;height:21px}
+  .tabbar .on{color:var(--accent)}
+  .tabbar .cnt{position:absolute;top:0;left:calc(50% + 6px);min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--danger);color:#fff;font-size:10px;font-weight:600;display:grid;place-items:center}
+  .content{padding:16px 14px calc(92px + env(safe-area-inset-bottom))}
+  .tw{margin:0 -14px;padding:0 14px}
+  #toast{bottom:calc(84px + env(safe-area-inset-bottom))}
+  /* type scale */
+  h1{font-size:19px;line-height:1.25}
+  h2{font-size:15px;margin-bottom:12px}
+  .head{margin-bottom:14px;align-items:flex-start}
+  .head>.row{width:100%}
+  .head>.row .btn{flex:1 1 auto;justify-content:center}
+  .card{padding:14px;margin-bottom:12px}
+  .cardh{flex-wrap:wrap}
+  .alert{padding:12px 14px;font-size:13px;margin-bottom:14px}
+  /* KPI strip: tidy 2-up tiles */
+  .strip{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:14px}
+  .strip .cell{padding:14px;grid-template-areas:"l" "v" "s";grid-template-columns:minmax(0,1fr);align-items:start;align-content:start}
+  .strip .l{font-size:12px}
+  .strip .v{font-size:19px;margin-top:6px}
+  .strip .s{font-size:11.5px;margin-top:4px}
+  .strip .spark{display:none}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .kpi{padding:12px}
+  .kpi .v{font-size:16px}
+  .bigvals{gap:10px 20px;margin-bottom:12px}
+  .bigvals .bv{border-right:none;padding-right:0}
+  .bigvals .bv .v{font-size:21px}
+  .chain{gap:10px}
+  .chain .c{padding:12px}
+  .chain .c .v{font-size:16px}
+  .steps{gap:4px}
+  .step{flex:1 1 calc(50% - 4px);padding:8px 10px;font-size:11.5px}
+  .filters{gap:8px}
+  .filters>*{flex:1 1 calc(50% - 8px)}
+  .tabs{width:auto}
+  .kv{gap:6px 14px}
+  /* forms open as a bottom sheet */
+  dialog{width:100vw;max-width:100vw;max-height:92vh;margin:auto 0 0;border-radius:18px 18px 0 0;border-bottom:none}
+  dialog[open]{display:flex;flex-direction:column}
+  .mh{padding:14px 16px}
+  .mb{padding:14px 16px;flex:1;min-height:0}
+  .mf{padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+  .mf .btn{flex:1;justify-content:center;padding:12px}
+  .fg{grid-template-columns:1fr;gap:12px}
+  .preview{grid-row:auto!important}
+  /* tables become stacked cards */
+  .tw{overflow:visible}
+  .tw table,.tw tbody,.tw tfoot{display:block}
+  .tw table.wide{min-width:0}
+  .tw thead{display:none}
+  .tw tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+  .tw tbody tr:hover{background:var(--surface)}
+  .tw td{display:block;padding:0;border:none;text-align:left;white-space:normal;min-width:0;overflow-wrap:anywhere}
+  .tw td.num{text-align:left}
+  .tw td::before{content:attr(data-label);display:block;font-size:11px;font-weight:500;color:var(--muted);margin-bottom:2px;letter-spacing:.01em}
+  .tw td[data-label=""]::before,.tw td:first-child::before{display:none}
+  .tw td:first-child{grid-column:1/-1;font-weight:600;font-size:14.5px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+  .tw td.span,.tw td[data-label=""]{grid-column:1/-1}
+  .tw tr:has(> td:nth-child(4):last-child){grid-template-columns:repeat(3,minmax(0,1fr))}
+  .tw td[data-label=""]:not(:first-child){display:flex;justify-content:flex-end;gap:8px}
+  .tw td[data-label=""]:empty,.tw td:empty{display:none}
+  .tw td .btn{white-space:nowrap}
+  .tw tfoot tr{background:var(--accent-soft);border-color:transparent}
+  .tw tfoot td:first-child{border-bottom-color:var(--accent-2)}
+  .tw tr.dim{opacity:.6}.tw tr.dim td{opacity:1}
+  .tw td.empty{padding:16px;border:none}
+  .tw tr:has(td.empty){display:block}
+  .tw[style*="max-height"]{max-height:none!important}
+  /* cards that only frame a table: drop the outer frame so row-cards get the full width */
+  .card:has(> .tw){background:none;border:none;box-shadow:none;padding:0}
+  .card:has(> .tw)>h2,.card:has(> .tw)>.cardh,.card:has(> .tw)>.row{padding:0 2px}
+  /* deal rows: compact 3-column card */
+  .tw table.deals tbody tr{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px}
+  .tw table.deals td:nth-child(1){grid-column:1/3;order:1;border:none;padding:0}
+  .tw table.deals td:nth-child(10){grid-column:3;order:2;display:flex;justify-content:flex-end;align-items:flex-start}
+  .tw table.deals td:nth-child(10)::before{display:none}
+  .tw table.deals td:nth-child(4){order:3}.tw table.deals td:nth-child(5){order:4}.tw table.deals td:nth-child(6){order:5}
+  .tw table.deals td:nth-child(3){order:6}.tw table.deals td:nth-child(2){order:7}.tw table.deals td:nth-child(7){order:8}
+  .tw table.deals td:nth-child(8){order:9}.tw table.deals td:nth-child(9){order:10;grid-column:span 2}
+  .tw table.deals td:nth-child(1){padding-bottom:4px}
+  /* ledger rows: date + ref on top, description, then amount and running balance */
+  .tw table.ledger tr{grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:12px 14px}
+  .tw table.ledger td:nth-child(1){grid-column:1;border:none;padding:0;font-size:13px;color:var(--muted);font-weight:500}
+  .tw table.ledger td:nth-child(2){grid-column:2;grid-row:1;text-align:right;font-weight:600}
+  .tw table.ledger td:nth-child(2)::before,.tw table.ledger td:nth-child(3)::before{display:none}
+  .tw table.ledger td:nth-child(3){grid-column:1/-1;font-size:14px}
+  .tw table.ledger td:nth-child(4),.tw table.ledger td:nth-child(5){grid-column:1;font-weight:600}
+  .tw table.ledger td:nth-child(4){color:var(--pos)}
+  .tw table.ledger td:nth-child(6){grid-column:2;text-align:right}
+  .tw table.ledger td:nth-child(4)::before,.tw table.ledger td:nth-child(5)::before,.tw table.ledger td:nth-child(6)::before{display:inline;margin-right:6px}
+  .tw table.deals tfoot tr{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .tw table.deals tfoot td:first-child{grid-column:1/-1}
+}
+@media (max-width:360px){.strip .v{font-size:17px}.tabbar a,.tabbar button{font-size:9.5px}}
 </style>
 </head>
 <body>
@@ -212,9 +324,11 @@ dialog::backdrop{background:rgba(17,17,20,.4);backdrop-filter:blur(2px)}
     <div class="sidefoot"><b style="color:var(--text)">Prototype</b> · play freely: refreshing the page brings the sample data back. Records only, no money moves.<div class="row" style="margin-top:8px;gap:6px"><button class="btn sm dan" data-act="clearAll">Clear all transactions</button><button class="btn sm" data-act="resetDemo">Reset sample data</button></div></div>
   </aside>
   <main class="main">
-    <div class="topbar"><div class="t" id="ptitle"></div><div class="row" id="pactions"></div></div>
+    <div class="topbar"><div class="tl"><button class="btn mbtn" data-act="menu" aria-label="Open menu"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="t" id="ptitle"></div></div><div class="row" id="pactions"></div></div>
     <div class="content" id="view"></div>
   </main>
+  <nav class="tabbar" id="tabbar"></nav>
+  <div class="scrim" data-act="menu"></div>
 </div>
 <dialog id="modal"></dialog>
 <div id="toast"></div>
@@ -624,7 +738,7 @@ function run(fn, okMsg) {
 const modal = document.getElementById('modal');
 function openModal(title, body, footer) {
   modal.innerHTML = `<div class="mh"><h2>${title}</h2><button class="x" data-act="closeModal" aria-label="Close">×</button></div><div class="mb">${body}</div>${footer ? `<div class="mf">${footer}</div>` : ''}`;
-  modal.showModal();
+  modal.showModal(); labelTables(modal);
   const f = modal.querySelector('form[data-live]'); if (f) LIVE[f.dataset.live]?.(f);
 }
 function closeModal() { if (modal.open) modal.close(); }
@@ -658,7 +772,7 @@ const IC = {
 };
 const icon = (k, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24">${IC[k]}</svg>`;
 const NAV_SECTIONS = [['Main', [['dashboard', 'Dashboard'], ['deals', 'Deals'], ['batches', 'Transit Batches'], ['parties', 'Parties & Ledgers']]], ['Finance', [['capital', 'Capital'], ['balances', 'Debtors & Creditors']]], ['Insights', [['reports', 'Reports']]], ['System', [['settings', 'Settings']]]];
-const TITLES = {dashboard: 'Overview Dashboard', deals: 'Deals', deal: 'Deal', batches: 'Transit Batches', batch: 'Transit Batch', parties: 'Parties & Ledgers', party: 'Party Ledger', reports: 'Reports', settings: 'Settings', capital: 'Capital', balances: 'Debtors & Creditors'};
+const TITLES = {dashboard: 'Dashboard', deals: 'Deals', deal: 'Deal', batches: 'Transit Batches', batch: 'Transit Batch', parties: 'Parties & Ledgers', party: 'Party Ledger', reports: 'Reports', settings: 'Settings', capital: 'Capital', balances: 'Debtors & Creditors'};
 function navCounts() {
   return {deals: S.deals.filter(d => d.status === 'pending_allocation').length,
     batches: S.batches.filter(b => activeBatch(b) && b.status !== 'settled').length};
@@ -792,7 +906,7 @@ function dealTable(list, showFoot) {
     const l = list.filter(d => d.status !== 'cancelled');
     foot = `<tfoot><tr><td colspan="3">${l.length} active deals</td><td class="num">${money(l.reduce((s, d) => s + d.inrPayout, 0), 'INR')}</td><td></td><td class="num">${money(l.reduce((s, d) => s + d.sarAmount, 0), 'SAR')}</td><td class="num">${money(l.reduce((s, d) => s + dealCalc(d).net, 0), 'INR')}</td><td colspan="3"></td></tr></tfoot>`;
   }
-  return `<div class="tw"><table class="wide"><thead><tr><th>Deal</th><th>Saudi agent</th><th>Recipient</th><th class="num">INR to deliver</th><th class="num">Deal rate</th><th class="num">SAR to collect</th><th class="num">Net profit</th><th>Batch</th><th>Distributor</th><th>Status</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div>`;
+  return `<div class="tw"><table class="wide deals"><thead><tr><th>Deal</th><th>Saudi agent</th><th>Recipient</th><th class="num">INR to deliver</th><th class="num">Deal rate</th><th class="num">SAR to collect</th><th class="num">Net profit</th><th>Batch</th><th>Distributor</th><th>Status</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div>`;
 }
 
 function pageDeals() {
@@ -978,7 +1092,7 @@ function pageParty(id) {
       const link = e.ref.kind === 'deal' ? `<a href="#/deal/${e.ref.id}">${e.ref.no}</a>` : e.ref.kind === 'capital' ? `<a href="#/capital">${e.ref.no}</a>` : `<a href="#/batch/${e.ref.id}">${e.ref.no}</a>`;
       return `<tr class="${e.rev ? 'dim' : ''}"><td>${fdt(e.date)}</td><td>${link}</td><td>${esc(e.memo)}</td><td class="num">${e.amt > 0 ? money(e.amt, c) : ''}</td><td class="num">${e.amt < 0 ? money(-e.amt, c) : ''}</td><td class="num"><b>${money(run, c)}</b></td></tr>`; });
     return `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${c} ledger</h2><span>Balance <b>${signed(run, c)}</b></span></div>
-      <div class="tw" style="margin-top:10px"><table><thead><tr><th>Date</th><th>Ref</th><th>Description</th><th class="num">In (+)</th><th class="num">Out (−)</th><th class="num">Balance</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
+      <div class="tw" style="margin-top:10px"><table class="ledger"><thead><tr><th>Date</th><th>Ref</th><th>Description</th><th class="num">In (+)</th><th class="num">Out (−)</th><th class="num">Balance</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
   }).join('');
   const myDeals = p.type === 'saudi_agent' ? S.deals.filter(d => d.saudiAgentId === id) : p.type === 'distributor' ? S.deals.filter(d => d.distributorId === id) : [];
   return `
@@ -1243,6 +1357,7 @@ const LIVE = {
 
 /* ============================ events ============================ */
 const ACT = {
+  menu() { document.body.classList.toggle('menu-open'); },
   closeModal,
   reverseTranche(el) { ask('Reverse this part', 'The part stays in the record, crossed out, with reversing ledger entries.', {reason: true, danger: true, ok: 'Reverse part'}, reason => run(() => A.reverseTranche(el.dataset.id, el.dataset.kind, el.dataset.tid, reason), 'Part reversed')); },
   useSlab() { const f = document.getElementById('dealForm'); f.dealRate.dataset.auto = '1'; LIVE.deal(f); },
@@ -1370,6 +1485,7 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+  if (el.dataset.act !== 'menu' && el.closest('.side')) document.body.classList.remove('menu-open');
   const fn = ACT[el.dataset.act]; if (fn) fn(el, e);
 });
 document.addEventListener('submit', e => {
@@ -1402,14 +1518,28 @@ function render() {
   document.getElementById('nav').innerHTML = NAV_SECTIONS.map(([sec, items]) => `<div class="navsec">${sec}</div>` + items.map(([k, l]) =>
     `<a href="#/${k}" class="${k === navKey ? 'on' : ''}">${icon(k)}<span>${l}</span>${cnt[k] ? `<span class="cnt" title="Needs action">${cnt[k]}</span>` : ''}</a>`).join('')).join('');
   document.getElementById('ptitle').textContent = TITLES[page] || '';
-  document.getElementById('pactions').innerHTML = `<button class="btn" data-act="rates" title="Update today's rates">Market <b style="font-variant-numeric:tabular-nums">${rate(S.settings.marketSarInrRate)}</b> <span class="muted small">${S.settings.rateLog.length ? fdt(S.settings.rateLog.at(-1).at) : ''}</span></button><button class="btn" data-act="newBatch">${icon('batches')}New batch</button><button class="btn pri" data-act="newDeal">${icon('plus')}New deal</button>`;
+  document.getElementById('pactions').innerHTML = `<button class="btn" data-act="rates" title="Update today's rates"><span class="hide-m">Market</span> <b style="font-variant-numeric:tabular-nums">${rate(S.settings.marketSarInrRate)}</b> <span class="muted small hide-m">${S.settings.rateLog.length ? fdt(S.settings.rateLog.at(-1).at) : ''}</span></button><button class="btn ico-m" data-act="newBatch" title="New batch">${icon('batches')}<span class="hide-m">New batch</span></button><button class="btn pri ico-m" data-act="newDeal" title="New deal">${icon('plus')}<span class="hide-m">New deal</span></button>`;
+  const TB = [['dashboard', 'Home'], ['deals', 'Deals'], ['batches', 'Batches'], ['parties', 'Parties']];
+  document.getElementById('tabbar').innerHTML = TB.map(([k, l]) => `<a href="#/${k}" class="${k === navKey ? 'on' : ''}">${icon(k)}<span>${l}</span>${cnt[k] ? `<span class="cnt">${cnt[k]}</span>` : ''}</a>`).join('') +
+    `<button data-act="menu" class="${TB.some(([k]) => k === navKey) ? '' : 'on'}"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>More</span></button>`;
   const P = {dashboard: pageDashboard, deals: pageDeals, deal: () => pageDeal(id), batches: pageBatches, batch: () => pageBatch(id),
     parties: pageParties, party: () => pageParty(id), capital: pageCapital, balances: pageBalances, reports: pageReports, settings: pageSettings}[page] || notFound;
   const ae = document.activeElement, focusId = ae?.id, sel = focusId && ae.selectionStart;
   document.getElementById('view').innerHTML = P();
+  labelTables(document.getElementById('view'));
   if (focusId) { const n = document.getElementById(focusId); if (n) { n.focus(); try { n.setSelectionRange(sel, sel); } catch (e) {} } }
 }
-window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { document.body.classList.remove('menu-open'); render(); window.scrollTo(0, 0); });
+// give every table cell its column name so phones can show rows as labelled cards
+function labelTables(root) {
+  root.querySelectorAll('.tw table').forEach(t => {
+    const heads = []; t.querySelectorAll('thead th').forEach(th => { for (let i = 0; i < (th.colSpan || 1); i++) heads.push(th.textContent.trim()); });
+    t.querySelectorAll('tbody tr, tfoot tr').forEach(tr => {
+      let c = 0;
+      [...tr.cells].forEach(td => { if (!td.hasAttribute('data-label')) td.dataset.label = heads[c] ?? ''; if (td.colSpan > 1) td.classList.add('span'); c += td.colSpan || 1; });
+    });
+  });
+}
 try { localStorage.removeItem(KEY); } catch (e) {}
 seed(); // always start from sample data; refresh resets
 S.capital ??= []; S.counters.capital ??= 0; S.settings = {...defaultSettings(), ...S.settings};
